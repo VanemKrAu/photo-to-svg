@@ -22,26 +22,49 @@ PYV=$(python3 -c 'import sys;print("%d.%d"%sys.version_info[:2])')
 ok "python3 $PYV"
 
 say "2/4  安装依赖（numpy / Pillow / opencv-python-headless）"
-# 优先装进虚拟环境，避免污染系统 python
+
+# pip 安装包装：
+#   * 兼容 Ubuntu 23.04+ 的 PEP 668「外部管理环境」保护
+#   * 参数用数组拼，避免空字符串被当成参数传给 pip
+pip_install() {
+  local py="$1" want_user="${2:-}"
+  local args=(-q)
+  [[ "$want_user" == "--user" ]] && args+=(--user)
+  args+=(-r "$HERE/requirements.txt")
+  if "$py" -m pip install "${args[@]}" 2>/tmp/_pip_err; then
+    return 0
+  fi
+  if grep -q "externally-managed-environment" /tmp/_pip_err; then
+    say "     系统 python 受 PEP 668 保护，改用 --user --break-system-packages"
+    "$py" -m pip install -q --user --break-system-packages -r "$HERE/requirements.txt"
+    return $?
+  fi
+  cat /tmp/_pip_err
+  return 1
+}
+
+PY=""
 if [[ -z "${VIRTUAL_ENV:-}" && -z "${SKIP_VENV:-}" ]]; then
-  if [[ ! -d "$HERE/.venv" ]]; then
+  if [[ ! -x "$HERE/.venv/bin/python" ]]; then
     say "     创建虚拟环境 .venv"
-    python3 -m venv "$HERE/.venv" 2>/dev/null || true
+    python3 -m venv "$HERE/.venv" >/dev/null 2>&1 || true
   fi
   if [[ -x "$HERE/.venv/bin/python" ]]; then
-    "$HERE/.venv/bin/python" -m pip install -q --upgrade pip
-    "$HERE/.venv/bin/python" -m pip install -q -r "$HERE/requirements.txt"
-    ok "已装进 $HERE/.venv"
-    PY="$HERE/.venv/bin/python"
-  else
-    python3 -m pip install -q $USER_FLAG -r "$HERE/requirements.txt"
-    ok "venv 创建失败，已装进系统 python（$USER_FLAG）"
-    PY="python3"
+    "$HERE/.venv/bin/python" -m pip install -q --upgrade pip >/dev/null 2>&1 || true
+    if pip_install "$HERE/.venv/bin/python"; then
+      ok "已装进 $HERE/.venv"
+      PY="$HERE/.venv/bin/python"
+    fi
   fi
-else
-  python3 -m pip install -q -r "$HERE/requirements.txt"
-  ok "已装进当前环境"
+fi
+
+if [[ -z "$PY" ]]; then
+  # venv 建不起来（缺 python3-venv）或显式 SKIP_VENV：退回系统 python
+  [[ -z "${SKIP_VENV:-}" ]] && say "     虚拟环境不可用（可能缺 python3-venv），退回系统 python"
+  pip_install python3 "$USER_FLAG"
+  ok "已装进系统 python"
   PY="python3"
+  [[ -z "${SKIP_VENV:-}" ]] && say "     提示：装 python3-venv 后重跑本脚本可获得更干净的环境"
 fi
 
 say "3/4  依赖自检"
