@@ -264,7 +264,17 @@ TEMPLATE = r'''<!DOCTYPE html>
   footer{flex:0 0 auto;padding:8px 12px calc(10px + env(safe-area-inset-bottom));
     border-top:1px solid var(--line);background:linear-gradient(0deg,#141422,#0d0d16);
     display:flex;flex-direction:column;gap:8px}
-  .row{display:flex;align-items:center;gap:8px}
+  /* 控制栏：窄屏下必须能横滑，否则右侧的倍速按钮会被挤出屏幕点不到 */
+  .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+  .row.scroll{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}
+  .row.scroll::-webkit-scrollbar{display:none}
+  @media (max-width:520px){
+    .row{gap:6px}
+    button{padding:6px 10px;font-size:12px}
+    .sp{flex:0 0 auto}
+    .keys{display:none !important}
+  }
   .bar{position:relative;height:22px;flex:1 1 auto;display:flex;align-items:center;cursor:pointer;touch-action:none}
   .bar .track{position:absolute;left:0;right:0;height:6px;border-radius:3px;background:#22223a}
   .bar .fill{position:absolute;left:0;height:6px;border-radius:3px;width:0;
@@ -272,7 +282,8 @@ TEMPLATE = r'''<!DOCTYPE html>
   .bar .knob{position:absolute;width:12px;height:12px;border-radius:50%;background:#fff;
     transform:translateX(-6px);box-shadow:0 1px 4px rgba(0,0,0,.6)}
   button{font:inherit;font-size:13px;color:var(--text);background:var(--panel);
-    border:1px solid var(--line);border-radius:7px;padding:7px 12px;cursor:pointer;white-space:nowrap}
+    border:1px solid var(--line);border-radius:7px;padding:7px 12px;cursor:pointer;
+    white-space:nowrap;flex:0 0 auto}
   button:active{background:#1b1b2c}
   button.on{background:var(--gold);border-color:var(--gold);color:#1a1200;font-weight:600}
   .sp{display:flex;gap:4px}
@@ -282,6 +293,11 @@ TEMPLATE = r'''<!DOCTYPE html>
     border:1px solid var(--line);border-radius:8px;padding:10px 16px;font-size:13px;display:none;pointer-events:none}
 
   /* ---------- 桌面端 / 宽屏适配 ---------- */
+  /* 窄屏：倍速组单独一行，永远点得到 */
+  @media (max-width:640px){
+    footer{padding:8px 10px calc(10px + env(safe-area-inset-bottom))}
+    .sp button{padding:5px 9px}
+  }
   @media (min-width:900px){
     header{padding:11px 22px;gap:14px}
     header h1{font-size:15px}
@@ -338,13 +354,13 @@ TEMPLATE = r'''<!DOCTYPE html>
     </div>
     <span class="meta" id="pct">0%</span>
   </div>
-  <div class="row">
+  <div class="row scroll">
     <button id="play">▶ 播放</button>
     <button id="reset" title="回到开头">↺</button>
     <button id="ghostBtn" class="on" title="显示/隐藏原图对照">对照</button>
     <button id="full" title="全屏（F）">⛶ 全屏</button>
     <span class="keys">空格 播放 · ←→ 快进退 · F 全屏</span>
-    <div style="flex:1 1 auto"></div>
+    <div style="flex:1 1 auto;min-width:8px"></div>
     <div class="sp">
       <button data-s="0.5">0.5×</button>
       <button data-s="1" class="on">1×</button>

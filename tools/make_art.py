@@ -1,3 +1,36 @@
+def pick_background(photo):
+    """选底色。
+
+    底色的作用是「哪些颜色可以整簇跳过不画」。选错的后果很严重：
+      * 选到画面里存在的颜色   -> 那片区域被挖空，露出底色（在深色区就是白点）
+      * 选到画面里不存在的颜色 -> 安全，底板只在缝隙里露一点点
+
+    所以策略是：高频色必须**明显**高频（>12%）才敢用；否则一律用画面里没有的中性色。
+    实测反例：一张海边照最高频色 #686868 占 5.94%，恰好越过旧的 5% 阈值，
+    而 #686868 正是画面里的阴影灰 -> 人物和沙滩的阴影被整簇挖掉，满图白点。
+    """
+    im = np.array(Image.open(photo).convert("RGB"))
+    flat = im.reshape(-1, 3)
+    q = flat // 8 * 8
+    cols, cnt = np.unique(q, axis=0, return_counts=True)
+    top = int(np.argmax(cnt))
+    bg = cols[top]
+    ratio = cnt[top] / len(flat)
+    lum = 0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2]
+
+    mean_lum = float(0.2126 * flat[:, 0].mean() + 0.7152 * flat[:, 1].mean()
+                     + 0.0722 * flat[:, 2].mean())
+    neutral = "#f0f0f0" if mean_lum >= 96 else "#101010"
+
+    if ratio >= 0.12:
+        hexbg = "#%02x%02x%02x" % tuple(int(v) for v in bg)
+        return hexbg, (14 if lum < 60 else 0), ratio
+
+    if ratio >= 0.05:
+        pass      # 旧阈值下会误用画面里的颜色，这里降级为中性色（见上面的反例）
+    return neutral, 0, ratio
+
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -163,8 +196,12 @@ def main():
         photo, note = preprocess(photo, pre, outdir)
         print("预处理：%s" % note)
 
-    bg, dark_cut, W, H = pick_background(photo)
-    print("描摹尺寸 %dx%d   底色 %s（dark_cut %d）" % (W, H, bg, dark_cut))
+    bg, dark_cut, ratio = pick_background(photo)
+    from PIL import Image as _I
+    with _I.open(photo) as _im:
+        W, H = _im.size
+    print("描摹尺寸 %dx%d   底色 %s（高频色占比 %.1f%%，dark_cut %d）"
+          % (W, H, bg, ratio * 100, dark_cut))
 
     print("\n［1/3］描摹 SVG")
     run([sys.executable, os.path.join(TOOLS, "build_svg_art.py"), photo,

@@ -112,6 +112,39 @@
   .note{font-size:11.5px;color:var(--dim);margin-top:10px}
   .warn{background:#2a1f0d;border:1px solid #6b5416;color:#e8c97a;border-radius:9px;
     padding:10px 13px;font-size:12.5px;margin-bottom:14px}
+  /* 历史 */
+  #historyCard{display:none}
+  .hitop{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}
+  .hitop h2{margin:0}
+  .hitop .quota{font-size:11.5px;color:var(--dim)}
+  .hitop button{font:inherit;font-size:11.5px;color:var(--dim);background:none;
+    border:1px solid var(--line);border-radius:7px;padding:3px 9px;cursor:pointer}
+  .hitop button{margin-left:6px}
+  .hitop button:hover{color:var(--err);border-color:#5a2a2a}
+  .hitop button#hPrune:hover{color:var(--gold);border-color:#6b5416}
+  .hlist{display:grid;gap:10px}
+  .hitem{display:flex;gap:12px;align-items:center;background:var(--panel2);
+    border:1px solid var(--line);border-radius:10px;padding:10px}
+  .hitem img{width:62px;height:62px;object-fit:cover;border-radius:7px;flex:0 0 auto;
+    background:#0a0a12;border:1px solid var(--line)}
+  .hitem .meta{flex:1 1 auto;min-width:0}
+  .hitem .t{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hitem .d{font-size:11.5px;color:var(--dim);margin-top:3px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hitem .acts{display:flex;gap:6px;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end}
+  .hitem .acts button{font:inherit;font-size:12px;color:var(--text);background:var(--panel);
+    border:1px solid var(--line);border-radius:7px;padding:6px 10px;cursor:pointer;white-space:nowrap}
+  .hitem .acts button:hover{background:#1c1c30;border-color:#3a3a5e}
+  .hitem .acts button.p{background:linear-gradient(180deg,#e0b83a,var(--gold));
+    border-color:#a98a1c;color:#1a1200;font-weight:600}
+  .hitem .acts button.del{color:var(--dim)}
+  .hitem .acts button.del:hover{color:var(--err);border-color:#5a2a2a}
+  .hempty{color:var(--dim);font-size:12.5px;padding:14px 2px;text-align:center}
+  @media (max-width:640px){
+    .hitem{flex-wrap:wrap}
+    .hitem .acts{width:100%;justify-content:flex-start}
+  }
+
   footer{padding:16px 20px 28px;color:var(--dim);font-size:12px;text-align:center;border-top:1px solid var(--line)}
   footer a{color:var(--gold);text-decoration:none}
   @media (max-width:640px){
@@ -223,6 +256,19 @@
       </div>
     </div>
 
+    <!-- 4 历史 -->
+    <div class="card" id="historyCard">
+      <div class="hitop">
+        <h2>4 · 生成历史</h2>
+        <div>
+          <span class="quota" id="hQuota"></span>
+          <button id="hPrune" title="按体积上限清理最旧的记录">清理空间</button>
+          <button id="hClear">全部清空</button>
+        </div>
+      </div>
+      <div class="hlist" id="hList"></div>
+    </div>
+
   </div>
 </main>
 
@@ -296,6 +342,218 @@
     logEl.scrollTop = logEl.scrollHeight;
   }
 
+  /* ---------- 历史（IndexedDB） ----------
+   * 用 IndexedDB 而不是 localStorage：单条记录就有 5~30 MB，
+   * localStorage 只有 5 MB 上限，塞不下。
+   */
+  const DB_NAME = 'photo-to-svg', DB_VER = 1, STORE = 'records';
+  const MAX_ITEMS = 12, MAX_BYTES = 260 * 1024 * 1024;   // 条数与总体积双上限
+  let db = null;
+
+  function openDB(){
+    return new Promise((res, rej) => {
+      const req = indexedDB.open(DB_NAME, DB_VER);
+      req.onupgradeneeded = () => {
+        const d = req.result;
+        if(!d.objectStoreNames.contains(STORE)){
+          const s = d.createObjectStore(STORE, { keyPath: 'id' });
+          s.createIndex('at', 'at');
+        }
+      };
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error);
+    });
+  }
+  const tx = (mode) => db.transaction(STORE, mode).objectStore(STORE);
+  const wrap = (r) => new Promise((res, rej) => {
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+
+  async function dbAll(){
+    const list = await wrap(tx('readonly').getAll());
+    return list.sort((a, b) => b.at - a.at);
+  }
+  async function dbPut(rec){ await wrap(tx('readwrite').put(rec)); }
+  async function dbDel(id){ await wrap(tx('readwrite').delete(id)); }
+
+  /* 超出上限就从最旧的开始删 */
+  async function prune(){
+    let list = await dbAll();
+    let bytes = list.reduce((n, r) => n + (r.size || 0), 0);
+    while(list.length > MAX_ITEMS || (bytes > MAX_BYTES && list.length > 1)){
+      const last = list.pop();
+      bytes -= last.size || 0;
+      await dbDel(last.id);
+    }
+    return list;
+  }
+
+  function fmtSize(n){
+    if(n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+    if(n >= 1024) return (n / 1024).toFixed(0) + ' KB';
+    return n + ' B';
+  }
+  function fmtTime(ms){
+    const d = new Date(ms), now = Date.now();
+    const p = (x) => String(x).padStart(2, '0');
+    const hm = p(d.getHours()) + ':' + p(d.getMinutes());
+    if(now - ms < 86400000) return '今天 ' + hm;
+    if(now - ms < 172800000) return '昨天 ' + hm;
+    return (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + hm;
+  }
+
+  /* 生成缩略图：把用户选的图直接画小，不用等 SVG 出来 */
+  function thumbOf(file){
+    return new Promise((res) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const N = 128;
+        const s = Math.min(N / img.width, N / img.height, 1);
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * s));
+        c.height = Math.max(1, Math.round(img.height * s));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        try{ res(c.toDataURL('image/jpeg', 0.72)); }catch(_){ res(''); }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); res(''); };
+      img.src = url;
+    });
+  }
+
+  const urlCache = new Map();   // id -> {svg, html} 的对象 URL，避免重复创建
+  function urlsOf(rec){
+    let u = urlCache.get(rec.id);
+    if(!u){
+      u = { svg: URL.createObjectURL(rec.svg), html: URL.createObjectURL(rec.html) };
+      urlCache.set(rec.id, u);
+    }
+    return u;
+  }
+
+  async function renderHistory(){
+    const list = await dbAll();
+    const card = $('historyCard'), box = $('hList');
+    if(!list.length){ card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    const total = list.reduce((n, r) => n + (r.size || 0), 0);
+    let quota = '（存在本机浏览器里）';
+    if(navigator.storage && navigator.storage.estimate){
+      try{
+        const est = await navigator.storage.estimate();
+        if(est.quota) quota = '占用 ' + fmtSize(total) + ' / 可用 ' + fmtSize(est.quota);
+      }catch(_){}
+    }
+    $('hQuota').textContent = list.length + ' 项 · ' + quota;
+
+    box.innerHTML = '';
+    for(const r of list){
+      const el = document.createElement('div');
+      el.className = 'hitem';
+
+      const img = document.createElement('img');
+      img.alt = '';
+      if(r.thumb) img.src = r.thumb;
+      el.appendChild(img);
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const t1 = document.createElement('div');
+      t1.className = 't'; t1.textContent = r.title || r.name;
+      const d1 = document.createElement('div');
+      d1.className = 'd';
+      d1.textContent = fmtTime(r.at) + ' · ' + (r.strokes || 0).toLocaleString() + ' 色块 · ' +
+                       (r.size && r.dims ? fmtSize(r.size) + ' · ' : '') + (r.dims || '');
+      meta.appendChild(t1); meta.appendChild(d1);
+      el.appendChild(meta);
+
+      const acts = document.createElement('div');
+      acts.className = 'acts';
+      const mk = (label, cls, fn, title) => {
+        const b = document.createElement('button');
+        b.textContent = label; if(cls) b.className = cls;
+        if(title) b.title = title;
+        b.onclick = fn; acts.appendChild(b); return b;
+      };
+      mk('▶ 预览', 'p', () => {
+        const u = urlsOf(r);
+        const a = document.createElement('a');
+        a.href = u.html; a.target = '_blank'; a.rel = 'noopener';
+        document.body.appendChild(a); a.click(); a.remove();
+      }, '在新标签页打开回放页');
+      mk('⬇ SVG', '', () => {
+        const a = document.createElement('a');
+        a.href = urlsOf(r).svg; a.download = (r.name || 'artwork') + '.svg';
+        document.body.appendChild(a); a.click(); a.remove();
+      });
+      mk('⬇ HTML', '', () => {
+        const a = document.createElement('a');
+        a.href = urlsOf(r).html; a.download = (r.name || 'artwork') + '.html';
+        document.body.appendChild(a); a.click(); a.remove();
+      });
+      mk('删除', 'del', async () => {
+        await dbDel(r.id);
+        const u = urlCache.get(r.id);
+        if(u){ URL.revokeObjectURL(u.svg); URL.revokeObjectURL(u.html); urlCache.delete(r.id); }
+        renderHistory();
+      });
+      el.appendChild(acts);
+      box.appendChild(el);
+    }
+  }
+
+  /* 「清理空间」：按上限删掉最旧的，并报告释放了多少 */
+  $('hPrune').addEventListener('click', async () => {
+    const before = await dbAll();
+    const beforeBytes = before.reduce((n, r) => n + (r.size || 0), 0);
+    if(!before.length){ alert('还没有生成记录。'); return; }
+    if(!confirm(
+      `当前 ${before.length} 项，共 ${fmtSize(beforeBytes)}。\n\n` +
+      `将按「最多 ${MAX_ITEMS} 项 / ${fmtSize(MAX_BYTES)}」的规则，` +
+      `删除最旧的记录直到符合上限。\n已下载到本地的文件不受影响。继续？`)) return;
+    const kept = await prune();
+    const afterBytes = kept.reduce((n, r) => n + (r.size || 0), 0);
+    renderHistory();
+    alert(`已清理 ${before.length - kept.length} 项，释放 ${fmtSize(beforeBytes - afterBytes)}。\n` +
+          `当前 ${kept.length} 项，共 ${fmtSize(afterBytes)}。`);
+  });
+
+  $('hClear').addEventListener('click', async () => {
+    const list = await dbAll();
+    if(!list.length){ alert('还没有生成记录。'); return; }
+    const bytes = list.reduce((n, r) => n + (r.size || 0), 0);
+    if(!confirm(
+      `清空全部 ${list.length} 项生成历史，释放约 ${fmtSize(bytes)}？\n\n` +
+      `此操作不可撤销。已经下载到本地的文件不受影响。`)) return;
+    for(const u of urlCache.values()){ URL.revokeObjectURL(u.svg); URL.revokeObjectURL(u.html); }
+    urlCache.clear();
+    await wrap(tx('readwrite').clear());
+    renderHistory();
+  });
+
+  /* 保存一条记录（超配额时自动删旧的再试） */
+  async function saveHistory(rec, blobs){
+    const item = Object.assign({}, rec, {
+      svg: blobs.svg, html: blobs.html,
+      size: (blobs.svg.size || 0) + (blobs.html.size || 0),
+      at: Date.now(),
+    });
+    try{
+      await dbPut(item);
+    }catch(e){
+      if(e && (e.name === 'QuotaExceededError' || /quota/i.test(String(e.message)))){
+        await prune();                       // 先清一批再试
+        try{ await dbPut(item); }
+        catch(_){ say('浏览器存储空间不足，这次结果没存进历史（可以直接下载）', 'err'); }
+      } else {
+        say('写入历史失败：' + (e && e.message || e), 'err');
+      }
+    }
+    await renderHistory();
+  }
+
   /* ---------- Worker ---------- */
   function boot(){
     // 首次点开页面就开始预热，等用户选完图基本就绪
@@ -342,7 +600,7 @@
 
   function mb(n){ return (n / 1048576).toFixed(1) + ' MB'; }
 
-  function onDone(m){
+  async function onDone(m){
     busy = false;
     go.disabled = false;
     go.textContent = '再生成一次';
@@ -368,6 +626,15 @@
 
     $('frame').src = urlHtml;
     $('result').style.display = 'block';
+
+    // 存进历史（缩略图取用户选的原图）
+    const thumb = file ? await thumbOf(file) : '';
+    await saveHistory({
+      id: 'r' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+      name, title: $('title').value || 'artwork',
+      strokes: m.strokes, dims: m.size.join('×'),
+      thumb,
+    }, { svg: svgBlob, html: htmlBlob });
   }
 
   /* ---------- 开始 ---------- */
@@ -395,7 +662,16 @@
     }, [buf]);
   });
 
-  boot();
+  /* 启动 */
+  (async () => {
+    try{
+      db = await openDB();
+      await renderHistory();
+    }catch(e){
+      console.warn('历史功能不可用：', e);
+    }
+    boot();
+  })();
 })();
 </script>
 </body>

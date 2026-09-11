@@ -96,7 +96,16 @@ def _add_strokes(svg_path):
 
 
 def pick_background(photo):
-    """选底色。占比 <5% 说明没有统一背景（插画），改用画面里不存在的中性色。"""
+    """选底色。
+
+    底色的作用是「哪些颜色可以整簇跳过不画」。选错的后果很严重：
+      * 选到画面里存在的颜色   → 那片区域被挖空，露出底色（在深色区就是白点）
+      * 选到画面里不存在的颜色 → 安全，底板只在缝隙里露一点点
+
+    所以策略是：高频色必须**明显**高频（>5%）才敢用；否则一律用画面里没有的中性色。
+    实测反例：一张海边照最高频色 #686868 占 5.94%，恰好越过旧阈值，
+    而 #686868 正是画面里的阴影灰 → 人物和沙滩的阴影被整簇挖掉，满图白点。
+    """
     import numpy as np
     from PIL import Image
     im = np.array(Image.open(photo).convert("RGB"))
@@ -107,11 +116,17 @@ def pick_background(photo):
     bg = cols[top]
     ratio = cnt[top] / len(flat)
     lum = 0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2]
-    if ratio >= 0.05:
-        return "#%02x%02x%02x" % tuple(int(v) for v in bg), (14 if lum < 60 else 0), ratio
+
+    # 画面的平均亮度决定用浅底还是深底（拿明暗对比大的那头，缝隙更不显眼）
     mean_lum = float(0.2126 * flat[:, 0].mean() + 0.7152 * flat[:, 1].mean()
                      + 0.0722 * flat[:, 2].mean())
-    return ("#f0f0f0" if mean_lum >= 96 else "#101010"), 0, ratio
+    neutral = "#f0f0f0" if mean_lum >= 96 else "#101010"
+
+    if ratio >= 0.12:                       # 明确的高频背景（照片里的天空/幕布）
+        return "#%02x%02x%02x" % tuple(int(v) for v in bg), (14 if lum < 60 else 0), ratio
+
+    # 剩下的一律用中性色。多花的那点体积，换的是「绝不会挖空画面」。
+    return neutral, 0, ratio
 
 
 def preprocess(photo, mode, outdir):
