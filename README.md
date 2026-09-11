@@ -32,7 +32,13 @@
 ```bash
 git clone https://github.com/VanemKrAu/photo-to-svg.git
 cd photo-to-svg
-bash install.sh                       # 约 1 分钟，装依赖 + 自检
+bash install.sh                       # 约 1 分钟，装依赖 + 自动自检
+```
+
+装完想再确认一遍能不能用（会真跑一张小图，约 40 秒）：
+
+```bash
+.venv/bin/python tools/smoke_test.py --render
 ```
 
 然后一条命令出全套：
@@ -147,6 +153,7 @@ photo-to-svg/
 │   ├── build_svg_art.py    描摹核心（与 skill/extras/ 同一份）
 │   ├── svg2canvas.py       SVG → Canvas 回放页（与 skill/extras/ 同一份）
 │   ├── verify_svg.py       保真度校验（与 skill/extras/ 同一份）
+│   ├── smoke_test.py       一条命令自检（依赖/语法/同步/链接/实跑）
 │   └── secret_scan.py      推送前密钥自检
 ├── docs/                   文档
 ├── examples/               示例图

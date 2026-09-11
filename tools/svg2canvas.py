@@ -620,6 +620,24 @@ def ghost_data_uri(img_path, w=1440):
 
 
 def main():
+    if len(sys.argv) < 4 or sys.argv[1] in ("-h", "--help"):
+        print(__doc__)
+        print("""位置参数（按顺序，注意第 6 位是占位符）：
+  1  in.svg            build_svg_art.py 产出的 SVG
+  2  原图              用于提取线稿层和对照层
+  3  out.html          输出文件
+  4  标题              页面顶部显示（默认「逐笔绘制回放（Canvas 版）」）
+  5  秒数              1× 速度下播完整幅画的时间（默认 80）
+  6  线稿笔占比        必须填 0 —— 占位参数，实际笔数由脚本从 SVG 里读
+  7  线稿时间占比      起稿阶段吃掉多少播出时间（默认 0.22）
+  8  线宽              线稿线条宽度（画布原生像素，默认 2.6）
+
+例：
+  python3 svg2canvas.py 作品.svg 原图.jpg 作品.html "作品 · 逐笔绘制回放" 90 0 0.15 2.6
+""")
+        return
+    if len(sys.argv) < 6:
+        raise SystemExit("参数不足，用 --help 看用法")
     src, photo, out = sys.argv[1], sys.argv[2], sys.argv[3]
     title = sys.argv[4] if len(sys.argv) > 4 else "逐笔绘制回放（Canvas 版）"
     duration = float(sys.argv[5]) if len(sys.argv) > 5 else 80.0

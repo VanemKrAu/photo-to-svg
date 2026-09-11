@@ -27,6 +27,16 @@ bash install.sh          # 装依赖 + 自检，约 1 分钟
 
 装完记下打印出来的 python 路径（通常是 `<项目>/.venv/bin/python`），下面用 `$PY` 指代。
 
+自检（可选，但换设备后建议跑一次）：
+
+```bash
+$PY tools/smoke_test.py            # 几秒，查依赖/语法/同步/链接
+$PY tools/smoke_test.py --render   # 再真跑一张小图，约 40 秒
+```
+
+> **改过 `tools/` 里任何脚本后**，务必跑一次 `smoke_test.py`：
+> 它会检查 `tools/` 与 `skill/extras/` 的同名脚本有没有分叉（两边必须一样）。
+
 如果这台设备上的 agent 还没装这个 skill，装上：
 
 ```bash

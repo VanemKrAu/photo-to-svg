@@ -1,0 +1,28 @@
+# 跨设备/跨系统统一换行符，避免 Windows 上 git 把 LF 改成 CRLF
+# 导致 shell 脚本带着 \r 跑不起来（"bad interpreter: No such file or directory"）
+* text=auto eol=lf
+
+# 明确按文本处理
+*.py    text eol=lf
+*.sh    text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.json  text eol=lf
+*.html  text eol=lf
+*.svg   text eol=lf
+*.gitattributes text eol=lf
+*.gitignore     text eol=lf
+
+# 二进制，别动
+*.jpg   binary
+*.jpeg  binary
+*.png   binary
+*.webp  binary
+*.gif   binary
+*.pdf   binary
+
+# 生成物不参与语言统计、也不要在 diff 里展开
+output/**   linguist-generated=true
+*.svg       linguist-documentation

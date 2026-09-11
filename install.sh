@@ -83,6 +83,9 @@ for f in glob.glob('$HERE/tools/*.py'):
     ast.parse(open(f,encoding='utf-8').read())
 print('  ✓ tools/ 下 %d 个脚本语法正常' % len(glob.glob('$HERE/tools/*.py')))"
 
+say "4.5/4  自检（tools/smoke_test.py）"
+"$PY" "$HERE/tools/smoke_test.py" || say "     自检有问题，先看上面的 ✗ 项"
+
 say "附：把 skill 装进 agent（可选）"
 cat <<SKILLHINT
   本仓库的 skill/ 是上游 image-to-css-art 的原样副本 + 本项目的 SVG 扩展。

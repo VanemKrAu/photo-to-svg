@@ -12,7 +12,7 @@
 
 ```bash
 python3 <skill-dir>/extras/build_svg_art.py <参考图> \
-  --out-prefix /workspace/我的插画 \
+  --out-prefix /你的输出路径/我的插画 \
   --title "画面标题"
 ```
 
