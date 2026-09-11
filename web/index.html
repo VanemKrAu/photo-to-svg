@@ -33,7 +33,9 @@
   .grid{display:grid;gap:16px}
   .col{display:grid;gap:16px;align-content:start;min-width:0}
 
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  /* min-width:0 必须有：卡片是 grid 子项，默认 min-width:auto 会被内部的
+     「4 列按钮组」（small 上的 nowrap）撑住，撑破列宽、压到隔壁栏上 */
+  .card{min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
   /* 触屏上 hover 会「粘住」，所以下面所有 hover 只对真鼠标生效 */
   .card h2{font-size:13px;font-weight:600;color:var(--dim);letter-spacing:.6px;
     text-transform:uppercase;margin-bottom:12px}
@@ -46,18 +48,25 @@
   #drop.over{border-color:var(--gold);background:#16162a}
   #drop .big{font-size:15px;margin-bottom:6px}
   #drop .sub{font-size:12px;color:var(--dim)}
+  /* 选好图之后把拖放区收成一条：大提示已经没用了，让缩略图当主角 */
+  #drop.hasfile{padding:15px 20px}
+  #drop.hasfile .big{font-size:13px;color:var(--dim);margin-bottom:0}
+  #drop.hasfile .sub,
+  #drop.hasfile .kbdhint{display:none}
   #pick{display:none}
   .kbdhint{display:none;margin-top:8px}
   @media (hover:hover) and (pointer:fine){ .kbdhint{display:block} }
   kbd{font:inherit;font-size:11px;padding:1px 5px;border:1px solid var(--line);
     border-bottom-width:2px;border-radius:4px;background:var(--panel);color:var(--text)}
-  #thumb{max-width:100%;max-height:200px;border-radius:8px;margin-top:12px;display:none}
+  #thumb{max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--line);
+    margin:12px auto 0;display:none}
 
   /* 选项 */
   .opt{margin-bottom:14px}
   .opt:last-child{margin-bottom:0}
   .opt label{display:block;font-size:12.5px;color:var(--dim);margin-bottom:6px}
-  .seg{display:grid;gap:7px;grid-template-columns:repeat(4,1fr)}
+  /* minmax(0,1fr)：让 4 列真的能等分收缩；写 1fr 的话列宽下限是内容最小宽度，列数一多就撑破卡片 */
+  .seg{display:grid;gap:7px;grid-template-columns:repeat(4,minmax(0,1fr))}
   @media (max-width:760px){ .seg{grid-template-columns:repeat(2,1fr)} }
   @media (max-width:380px){ .seg{grid-template-columns:1fr} }
   .seg button{
@@ -114,8 +123,30 @@
   .barinfo{font-size:11.5px;color:var(--dim);margin-top:6px}
   .barinfo b{color:var(--gold)}
 
-  /* 结果 */
+  /* 结果：手机上生成前整卡不显示（否则页面底部多一块空卡片）；
+     宽屏下由下面的媒体查询放开，空的时候当右栏的引导区 */
+  #outCard{display:none}
+  #outCard.hasResult{display:flex;flex-direction:column}
   #result{display:none}
+
+  /* 结果卡的空状态 —— 只在宽屏露脸，把右栏撑满 */
+  #emptyState{display:none;flex:1 1 auto;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:34px 24px;gap:0;
+    border:2px dashed var(--line);border-radius:12px;background:var(--panel2)}
+  /* 与页头 h1 的方标同一套渐变，中间叠一个播放三角：这是「回放」要落地的位置 */
+  .es-logo{width:60px;height:60px;border-radius:18px;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(140deg,#ff9ec4,#c9a227 55%,#4fc3f7);box-shadow:0 0 26px rgba(201,162,39,.32)}
+  .es-title{font-size:15px;font-weight:600;margin-top:16px}
+  .es-desc{font-size:12.5px;color:var(--dim);margin-top:7px;line-height:1.7;max-width:340px}
+  .es-steps{display:flex;align-items:center;justify-content:center;gap:28px;
+    margin-top:26px;flex-wrap:wrap}
+  .es-steps span{position:relative;display:flex;align-items:center;gap:7px;
+    font-size:12.5px;color:var(--dim)}
+  .es-steps b{width:21px;height:21px;border-radius:50%;background:var(--gold);color:#1a1200;
+    font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .es-steps span:not(:last-child)::after{content:"→";position:absolute;right:-20px;
+    color:#3a3a5e;font-size:12px}
+  .es-note{margin-top:18px;font-size:11.5px;color:#4a4a68}
   .files{display:grid;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:12px}
   .file{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px}
   .file .n{font-size:12px;color:var(--dim)}
@@ -173,8 +204,11 @@
   @media (min-width:1060px){
     .wrap{max-width:1240px}
     main{padding:24px 28px}
-    /* 左栏放「选图 + 参数」，右栏放「生成 + 结果 + 历史」，宽屏不再浪费两侧空间 */
-    .grid{grid-template-columns:minmax(340px,400px) minmax(0,1fr);gap:18px}
+    /* 左栏 = 控制面板（选图 → 参数 → 生成），固定 480px；
+       右栏 = 输出（结果 → 历史），剩余宽度全给回放预览。
+       480px 是照「4 列按钮组 + 并排输入框」的最小宽度定的，改小参数卡的按钮文字会被截 */
+    .grid{grid-template-columns:480px minmax(0,1fr);gap:18px}
+    .col{gap:18px}
     .warn{grid-column:1 / -1}
     h1{font-size:21px}
     header{padding:26px 28px 20px}
@@ -182,10 +216,15 @@
     input[type=text],input[type=number]{font-size:13.5px;padding:10px 13px}
     #frame{height:min(72vh,660px)}
     .files{grid-template-columns:1fr 1fr}
+
+    /* 右栏铺满整列高，结果卡吃掉剩余高度：
+       生成前是一块引导区，不再是「左边一大条 + 右边一小截、剩下半屏空白」 */
+    .col-right{display:flex;flex-direction:column}
+    .col-right > #outCard{display:flex;flex-direction:column;flex:1 1 auto;min-height:360px}
+    #outCard:not(.hasResult) #emptyState{display:flex}
   }
   @media (min-width:1500px){
     .wrap{max-width:1420px}
-    .grid{grid-template-columns:minmax(360px,420px) minmax(0,1fr)}
     h1{font-size:23px}
     #frame{height:min(76vh,760px)}
   }
@@ -301,10 +340,6 @@
       </div>
     </div>
 
-    </div><!-- /左列 -->
-
-    <!-- 右列：生成 + 结果 + 历史 -->
-    <div class="col">
     <!-- 3 生成 -->
     <div class="card">
       <h2>3 · 生成</h2>
@@ -317,11 +352,34 @@
         <div id="log"></div>
       </div>
 
-    </div><!-- /生成卡（左栏结束） -->
+    </div><!-- /生成卡 -->
 
-    <!-- 4 结果（没有结果时不显示，避免底部多出一块空卡片） -->
-    <div class="card" id="outCard" style="display:none">
+    </div><!-- /左列 -->
+
+    <!-- 右列：结果 + 历史 -->
+    <div class="col col-right">
+
+    <!-- 4 结果（手机上生成前不显示，避免底部多出一块空卡片；宽屏下始终显示，
+         没结果的时候当右栏的引导区，把整栏填满） -->
+    <div class="card" id="outCard">
       <h2>4 · 结果</h2>
+
+      <div id="emptyState">
+        <div class="es-logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="26" height="26"><path
+            d="M9.5 7.2v9.6a.8.8 0 0 0 1.22.68l7.6-4.8a.8.8 0 0 0 0-1.36l-7.6-4.8A.8.8 0 0 0 9.5 7.2Z"
+            fill="#1a1200"/></svg>
+        </div>
+        <div class="es-title">生成的作品会出现在这里</div>
+        <div class="es-desc">逐笔回放预览、SVG 与 HTML 的下载入口，都在这栏。</div>
+        <div class="es-steps">
+          <span><b>1</b>选图</span>
+          <span><b>2</b>调参数</span>
+          <span><b>3</b>开始生成</span>
+        </div>
+        <div class="es-note">生成大约需要 1～3 分钟 · 进度显示在左侧「3 · 生成」栏</div>
+      </div>
+
       <div id="result">
         <a id="openHtml" class="openbtn" target="_blank" rel="noopener">
           <span class="ar">▶</span>
@@ -406,8 +464,11 @@
     file = f;
     thumb.src = URL.createObjectURL(f);
     thumb.style.display = 'block';
+    drop.classList.add('hasfile');                 // 收成一条，只留「更换图片」
+    drop.querySelector('.big').textContent = '点击或拖入可更换图片';
     go.disabled = !ready;
     $('result').style.display = 'none';
+    $('outCard').classList.remove('hasResult');   // 换了图，先回到空状态
     $('progWrap').style.display = 'none';
     if(!$('title').value){
       $('title').value = f.name.replace(/\.[^.]+$/, '').slice(0, 40);
@@ -764,7 +825,7 @@
 
     $('frame').src = urlHtml;
     $('result').style.display = 'block';
-    $('outCard').style.display = 'block';
+    $('outCard').classList.add('hasResult');
 
     // 存进历史（缩略图取用户选的原图）
     const thumb = file ? await thumbOf(file) : '';
@@ -781,6 +842,7 @@
     if(!file || !ready || busy) return;
     busy = true; go.disabled = true;
     $('result').style.display = 'none';
+    $('outCard').classList.remove('hasResult');   // 生成中：结果卡回到引导区，完成了再亮结果
     $('progWrap').style.display = 'block';
     logEl.innerHTML = '';
     barFill.style.width = '0%';

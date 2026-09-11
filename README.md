@@ -183,7 +183,7 @@ cp -r skill ~/.agents/skills/image-to-css-art
 | [`ATTRIBUTION.md`](ATTRIBUTION.md) | **出处、上游项目、许可** |
 | [`docs/原理与流程.md`](docs/原理与流程.md) | 整条流水线怎么走的、数据格式、关键设计 |
 | [`docs/参数速查.md`](docs/参数速查.md) | 每个参数怎么选、不同图类型的经验值 |
-| [`docs/踩坑记录.md`](docs/踩坑记录.md) | **12 个真实踩过的坑**及修法（改代码前必读） |
+| [`docs/踩坑记录.md`](docs/踩坑记录.md) | **15 个真实踩过的坑**及修法（改代码前必读） |
 | [`AGENTS.md`](AGENTS.md) | 给 AI 助手的操作规则（让它直接照做） |
 | [`SETUP.md`](SETUP.md) | 换设备 / 换系统的详细安装步骤 |
 

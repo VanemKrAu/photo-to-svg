@@ -29,6 +29,8 @@
 - 网页版跑的是**同一份 Python 脚本**，没有另写 JS 实现；改了 `tools/` 里任何一个，
   网页版下次部署就跟着变（`web_run.py` 也是直接 import 那两个脚本）
 - `smoke_test.py` 会检查 worker.js 声明的文件清单与实际发布内容是否一致
+- 改过界面后更新 README 那张截图：`python3 tools/shot_web.py`（需要 playwright）。
+  它把界面设成「已选好图、等待生成」的状态再截整页，默认输出覆盖 `examples/screenshot-web.png`
 
 ---
 
