@@ -159,8 +159,7 @@
   .hempty{color:var(--dim);font-size:12.5px;padding:14px 2px;text-align:center}
   /* 结果卡的空状态：只留一行淡淡的提示，不铺底色、不画框 ——
      之前是「灰底 + 虚线框」的横条，在页面最底部看着像多出来一条灰条 */
-  .empty{color:var(--dim);font-size:12.5px;line-height:1.7;padding:6px 2px 2px;text-align:left}
-  .empty b{color:#9aa7b8;font-weight:600}
+  .empty{color:var(--dim);font-size:12.5px}
   @media (max-width:640px){
     .hitem{flex-wrap:wrap}
     .hitem .acts{width:100%;justify-content:flex-start}
@@ -313,13 +312,9 @@
 
     </div><!-- /生成卡（左栏结束） -->
 
-    <!-- 4 结果 -->
-    <div class="card" id="outCard">
+    <!-- 4 结果（没有结果时不显示，避免底部多出一块空卡片） -->
+    <div class="card" id="outCard" style="display:none">
       <h2>4 · 结果</h2>
-      <div class="empty" id="resultEmpty">
-        <b>还没有结果。</b><br>选好图，点「开始生成」——预览和下载会出现在这里。
-      </div>
-
       <div id="result">
         <a id="openHtml" class="openbtn" target="_blank" rel="noopener">
           <span class="ar">▶</span>
@@ -762,7 +757,7 @@
 
     $('frame').src = urlHtml;
     $('result').style.display = 'block';
-    $('resultEmpty').style.display = 'none';
+    $('outCard').style.display = 'block';
 
     // 存进历史（缩略图取用户选的原图）
     const thumb = file ? await thumbOf(file) : '';
@@ -779,7 +774,6 @@
     if(!file || !ready || busy) return;
     busy = true; go.disabled = true;
     $('result').style.display = 'none';
-    $('resultEmpty').style.display = 'block';
     $('progWrap').style.display = 'block';
     logEl.innerHTML = '';
     barFill.style.width = '0%';
