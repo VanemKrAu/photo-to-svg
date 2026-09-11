@@ -11,10 +11,21 @@ make_art.py —— 一条命令跑完「照片 → 描摹 SVG → Canvas 逐笔�
   4. 写一份.json 参数报告
 
 用法：
-  python3 工具/make_art.py <原图> <作品名> [标题] [1×秒数] [线稿时间占比] [epsilon]
+  python3 tools/make_art.py <原图> <作品名> [标题] [秒数] [线稿时间占比] [epsilon] [线宽]
+                            [--preprocess=none|auto|illust]
+
+  秒数          1× 速度下播完整幅画的时间，默认 90
+  线稿时间占比  起稿阶段吃掉多少播出时间，默认 0.15
+  epsilon       轮廓简化容差，只影响顶点数不影响形状数，默认 0.25
+  线宽          线稿线条宽度（画布原生像素），默认 2.6
+
+  --preprocess=illust   插画/动漫图：2x 放大 + NL-Means 降噪（平坦区更干净）
+  --preprocess=auto     宽度 < 1200 时自动 2x 放大（小图边缘更顺）
+  --preprocess=none     原样描摹（默认）
 
 例：
-  python3 工具/make_art.py /upload/xxx.jpg 海边人像 "海边人像 · 逐笔绘制回放" 90 0.22
+  python3 tools/make_art.py 照片.jpg 海边人像 "海边人像 · 逐笔绘制回放" 90 0.15 0.25 2.6
+  python3 tools/make_art.py 插画.png 浴室少女 "浴室少女" 90 0.15 0.25 2.2 --preprocess=illust
 """
 import os
 import re
@@ -28,6 +39,37 @@ from PIL import Image
 #   本文件在 <项目>/tools/make_art.py  →  TOOLS=<项目>/tools, OUT_ROOT=<项目>/output
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 OUT_ROOT = os.environ.get("SVG_ART_OUT") or os.path.join(os.path.dirname(TOOLS), "output")
+
+
+def preprocess(photo, mode, workdir):
+    """可选预处理。返回要描摹的图路径。
+
+    * none  —— 原样描摹
+    * auto  —— 宽度 < 1200 时 2x LANCZOS 放大（小图边缘容易毛，放大后轮廓更顺）
+    * illust —— 2x LANCZOS 放大 + NL-Means 降噪（插画/动漫图：压掉 JPEG 噪点，
+                平坦区明显变干净；实测某插画平坦区 48.8% → 65.8%）
+    """
+    import cv2
+    img = cv2.imread(photo, cv2.IMREAD_UNCHANGED)
+    if img is None:
+        raise SystemExit("读不了这张图：%s" % photo)
+    if img.shape[2] == 4:                     # 带 alpha：先合成到白底
+        a = (img[:, :, 3].astype(np.float32) / 255)[..., None]
+        img = (img[:, :, :3].astype(np.float32) * a + 255.0 * (1 - a)).astype(np.uint8)
+    h, w = img.shape[:2]
+
+    do_scale = (mode == "illust") or (mode == "auto" and w < 1200)
+    if not do_scale and mode != "illust":
+        return photo, None
+
+    if do_scale:
+        img = cv2.resize(img, (w * 2, h * 2), interpolation=cv2.INTER_LANCZOS4)
+    if mode == "illust":
+        img = cv2.fastNlMeansDenoisingColored(img, None, 6, 6, 7, 21)
+
+    out = os.path.join(workdir, "_prep.png")
+    cv2.imwrite(out, img)
+    return out, "%s → %dx%d" % (mode, img.shape[1], img.shape[0])
 
 
 def pick_background(photo):
@@ -90,27 +132,42 @@ def add_strokes(svg_path):
 
 
 def main():
-    if len(sys.argv) < 3:
+    if len(sys.argv) < 3 or sys.argv[1] in ("-h", "--help"):
         print(__doc__)
         return
-    photo = os.path.abspath(sys.argv[1])
-    name = sys.argv[2]
-    title = sys.argv[3] if len(sys.argv) > 3 else (name + " · 逐笔绘制回放")
-    dur = sys.argv[4] if len(sys.argv) > 4 else "90"
-    outl = sys.argv[5] if len(sys.argv) > 5 else "0.15"
-    eps = sys.argv[6] if len(sys.argv) > 6 else "0.25"
-    linew = sys.argv[7] if len(sys.argv) > 7 else "2.6"
+    argv = [a for a in sys.argv[1:] if not a.startswith("--")]
+    flags = [a for a in sys.argv[1:] if a.startswith("--")]
+    pre = "none"
+    for f in flags:
+        if f.startswith("--preprocess="):
+            pre = f.split("=", 1)[1]
+    if pre not in ("none", "auto", "illust"):
+        raise SystemExit("--preprocess 只能是 none / auto / illust")
+    if len(argv) < 2:
+        print(__doc__)
+        return
+    photo = os.path.abspath(argv[0])
+    name = argv[1]
+    title = argv[2] if len(argv) > 2 else (name + " · 逐笔绘制回放")
+    dur = argv[3] if len(argv) > 3 else "90"
+    outl = argv[4] if len(argv) > 4 else "0.15"
+    eps = argv[5] if len(argv) > 5 else "0.25"
+    linew = argv[6] if len(argv) > 6 else "2.6"
 
     outdir = os.path.join(OUT_ROOT, name)
     os.makedirs(outdir, exist_ok=True)
     svg = os.path.join(outdir, name + ".svg")
     html = os.path.join(outdir, name + ".html")
 
+    if pre != "none":
+        photo, note = preprocess(photo, pre, outdir)
+        print("预处理：%s" % note)
+
     bg, dark_cut, W, H = pick_background(photo)
-    print("原图 %dx%d   底色 %s（dark_cut %d）" % (W, H, bg, dark_cut))
+    print("描摹尺寸 %dx%d   底色 %s（dark_cut %d）" % (W, H, bg, dark_cut))
 
     print("\n［1/3］描摹 SVG")
-    run(["python3", os.path.join(TOOLS, "build_svg_art.py"), photo,
+    run([sys.executable, os.path.join(TOOLS, "build_svg_art.py"), photo,
          "--out-prefix", os.path.join(outdir, name),
          "--max-width", str(W), "--colors", "512", "--passes", "0",
          "--epsilon", eps, "--min-area", "1",
@@ -121,7 +178,7 @@ def main():
     add_strokes(svg)
 
     print("\n［3/3］生成 Canvas 回放页（线稿层 + 扫描线切分 + 视觉重量时间轴）")
-    run(["python3", os.path.join(TOOLS, "svg2canvas.py"), svg, photo,
+    run([sys.executable, os.path.join(TOOLS, "svg2canvas.py"), svg, photo,
          html, title, dur, "0", outl, linew])
 
     # 自检：回放页的画布尺寸必须和 SVG 的 viewBox 一致，

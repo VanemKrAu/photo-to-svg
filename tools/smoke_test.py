@@ -145,6 +145,57 @@ def check_skill():
         bad("skill/LICENSE 丢了上游版权声明（MIT 要求保留）")
 
 
+def check_web():
+    """网站（GitHub Pages）：文件齐不齐、worker 声明的清单与站点内容是否一致。"""
+    print("\n[5b/6] 网站（web/）")
+    web = os.path.join(ROOT, "web")
+    need = ["index.html", "worker.js", "web_run.py"]
+    missing = [f for f in need if not os.path.exists(os.path.join(web, f))]
+    if missing:
+        for m in missing:
+            bad("web/ 缺 %s" % m)
+        return
+
+    try:
+        ast.parse(open(os.path.join(web, "web_run.py"), encoding="utf-8").read())
+    except SyntaxError as e:
+        bad("web/web_run.py 语法错误：%s" % e)
+        return
+
+    # worker.js 里声明的 APP_FILES，必须都能在发布目录里找到
+    src = open(os.path.join(web, "worker.js"), encoding="utf-8").read()
+    m = re.search(r"const APP_FILES = \[(.*?)\];", src, re.S)
+    if not m:
+        bad("worker.js 里找不到 APP_FILES 清单")
+        return
+    files = re.findall(r"'([^']+)'", m.group(1))
+    absent = []
+    for rel in files:
+        # 站点布局：web_run.py 在根，tools/ 与 scripts/ 由 workflow 从仓库拷
+        if rel.startswith("tools/"):
+            src_path = os.path.join(ROOT, rel)
+        elif rel.startswith("scripts/"):
+            src_path = os.path.join(ROOT, "skill", rel)
+        else:
+            src_path = os.path.join(web, rel)
+        if not os.path.exists(src_path):
+            absent.append("%s（找的是 %s）" % (rel, os.path.relpath(src_path, ROOT)))
+    if absent:
+        for a in absent:
+            bad("worker.js 要的 %s 不存在 —— 发布会 404" % a)
+    else:
+        ok("worker.js 声明的 %d 个文件都在（含 tools/ 与 skill/scripts/）" % len(files))
+
+    # 检查网页里引用的文件名
+    idx = open(os.path.join(web, "index.html"), encoding="utf-8").read()
+    if "worker.js" not in idx:
+        bad("index.html 里没有引用 worker.js")
+    else:
+        ok("index.html 引用了 worker.js")
+    if "pyodide" in src.lower():
+        ok("worker.js 用 Pyodide 在浏览器里跑 Python")
+
+
 def check_docs():
     print("\n[5/6] 文档链接与路径")
     bad_links = []
@@ -219,7 +270,7 @@ def check_render():
 def main():
     print("photo-to-svg 自检 —— %s" % ROOT)
     check_deps(); check_syntax(); check_no_drift(); check_skill()
-    check_installed_skill(); check_docs()
+    check_installed_skill(); check_web(); check_docs()
     if "--render" in sys.argv:
         check_render()
     else:

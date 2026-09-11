@@ -19,6 +19,19 @@
 
 ---
 
+## 网页版
+
+仓库同时是一个可直接用的**网页工具**（GitHub Pages 托管）：
+打开 https://vanemkrau.github.io/photo-to-svg/ → 拖图 → 下载 SVG + 回放页。
+
+- `web/index.html` 界面、`web/worker.js`（Pyodide Worker）、`web/web_run.py`（浏览器端驱动）
+- `.github/workflows/pages.yml` 在 push 时把 `web/` + `tools/` + `skill/scripts/` 拼成静态站点发布
+- 网页版跑的是**同一份 Python 脚本**，没有另写 JS 实现；改了 `tools/` 里任何一个，
+  网页版下次部署就跟着变（`web_run.py` 也是直接 import 那两个脚本）
+- `smoke_test.py` 会检查 worker.js 声明的文件清单与实际发布内容是否一致
+
+---
+
 ## 0. 环境自检（第一次用）
 
 ```bash

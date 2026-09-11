@@ -1,0 +1,80 @@
+name: 构建并发布到 GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'tools/**'
+      - 'skill/scripts/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 拼装静态站点
+        run: |
+          set -e
+          rm -rf _site && mkdir -p _site/tools _site/scripts
+          # 网站本体
+          cp web/index.html web/worker.js web/web_run.py _site/
+          # 流水线脚本（与仓库里同一份，不复制一份改过的）
+          cp tools/build_svg_art.py tools/svg2canvas.py _site/tools/
+          # 上游 skill 的算法模块（build_svg_art 靠上溯父目录找 scripts/css_art）
+          cp -r skill/scripts/css_art _site/scripts/
+          # 清掉缓存文件，别发布出去
+          find _site -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
+          find _site -name '*.pyc' -delete 2>/dev/null || true
+
+      - name: 站点自检
+        run: |
+          set -e
+          fail=0
+          for f in index.html worker.js web_run.py tools/build_svg_art.py \
+                   tools/svg2canvas.py scripts/css_art/regions.py \
+                   scripts/css_art/geometry.py scripts/css_art/quality.py \
+                   scripts/css_art/render.py scripts/css_art/audit.py \
+                   scripts/css_art/cli.py scripts/css_art/__init__.py; do
+            if [ -f "_site/$f" ]; then echo "  OK  $f"; else echo "  缺  $f"; fail=1; fi
+          done
+          # 核对 worker.js 里列的文件清单与实际发布内容一致
+          python3 - <<'PY'
+          import re, os, sys
+          src = open('_site/worker.js', encoding='utf-8').read()
+          block = re.search(r'const APP_FILES = \[(.*?)\];', src, re.S).group(1)
+          files = re.findall(r"'([^']+)'", block)
+          missing = [f for f in files if not os.path.isfile(os.path.join('_site', f))]
+          print('worker.js 声明 %d 个文件' % len(files))
+          if missing:
+              print('  站点里缺：', missing); sys.exit(1)
+          print('  全部存在')
+          PY
+          exit $fail
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

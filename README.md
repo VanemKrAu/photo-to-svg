@@ -27,7 +27,32 @@
 
 ---
 
+## 网页版（浏览器里直接用，无需安装）
+
+**在线使用：https://vanemkrau.github.io/photo-to-svg/**
+
+打开网页 → 拖一张图片进去 → 等一会儿 → 下载 SVG 和回放页。
+
+- **图片不上传**：整个流水线跑在你自己的浏览器里（Pyodide 把 CPython + OpenCV 编译成 WebAssembly）
+- **无需安装**：第一次打开要下载约 30 MB 运行时，之后走浏览器缓存
+- **耗时参考**（实测，取决于设备）：
+
+  | 档位 | 长边 | 耗时 | 产物大小 |
+  |---|---|---|---|
+  | 快速 | 800 | 约 1 分钟 | SVG 几 MB |
+  | 标准 | 1200 | 约 1.5 分钟 | SVG 16 MB / HTML 7 MB |
+  | 高清 | 1600 | 约 2.5 分钟 | — |
+  | 原始 | 不缩放 | 3 分钟起 | SVG 32 MB / HTML 13 MB（1440×2012 实拍） |
+
+  手机建议选「标准」及以下；超大图可能因浏览器内存不足失败。
+
+网页版跑的是**仓库里同一份 Python 脚本**（`tools/` + `skill/scripts/`），
+没有另写一套 JS 实现，所以效果与本地命令行完全一致。
+
+---
+
 ## 快速开始
+
 
 ```bash
 git clone https://github.com/VanemKrAu/photo-to-svg.git
@@ -155,8 +180,13 @@ photo-to-svg/
 │   ├── verify_svg.py       保真度校验（与 skill/extras/ 同一份）
 │   ├── smoke_test.py       一条命令自检（依赖/语法/同步/链接/实跑）
 │   └── secret_scan.py      推送前密钥自检
+├── web/                    ★ 网页版（GitHub Pages）
+│   ├── index.html          界面
+│   ├── worker.js           Web Worker：加载 Pyodide、跑流水线
+│   └── web_run.py          浏览器端驱动（不走 subprocess，直接调模块）
 ├── docs/                   文档
 ├── examples/               示例图
+├── .github/workflows/      发布网页版到 Pages
 └── output/                 产物（已 gitignore）
 ```
 
