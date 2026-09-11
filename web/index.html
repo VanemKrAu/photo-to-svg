@@ -47,15 +47,26 @@
   .opt{margin-bottom:14px}
   .opt:last-child{margin-bottom:0}
   .opt label{display:block;font-size:12.5px;color:var(--dim);margin-bottom:6px}
-  .seg{display:flex;gap:6px;flex-wrap:wrap}
+  .seg{display:grid;gap:7px;grid-template-columns:repeat(4,1fr)}
+  @media (max-width:760px){ .seg{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:380px){ .seg{grid-template-columns:1fr} }
   .seg button{
-    flex:1 1 auto;min-width:92px;font:inherit;font-size:13px;color:var(--text);
+    font:inherit;font-size:13px;color:var(--text);text-align:center;
     background:var(--panel2);border:1px solid var(--line);border-radius:8px;
-    padding:9px 12px;cursor:pointer;transition:background .12s,border-color .12s,color .12s
+    padding:9px 8px;cursor:pointer;transition:background .12s,border-color .12s,color .12s;
+    line-height:1.35
   }
   .seg button:hover{background:#1c1c30;border-color:#3a3a5e}
+  .seg button small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .seg button.on{background:var(--gold);border-color:var(--gold);color:#1a1200;font-weight:650}
   .seg button small{display:block;font-size:10.5px;opacity:.68;font-weight:400}
+  /* 档位下方的补充说明：与上方卡片同为 12px 内边距对齐，不用负边距 */
+  .seg-hint{display:none;margin-top:9px;padding:9px 12px;font-size:12px;line-height:1.6;
+    color:#e8c97a;background:#241b0b;border:1px solid #4a3a0e;border-radius:9px;
+    border-left:3px solid var(--gold)}
+  .seg-hint.show{display:block}
+  .seg-hint.muted{color:var(--dim);background:var(--panel2);
+    border-color:var(--line);border-left-color:#3a3a5e}
   .row{display:flex;gap:12px;flex-wrap:wrap}
   .row > *{flex:1 1 200px}
   input[type=text],input[type=number]{
@@ -206,13 +217,13 @@
           <button data-w="800">快速<small>800 · 约 1 分钟</small></button>
           <button data-w="1200" class="on">标准<small>1200 · 约 1.5 分钟</small></button>
           <button data-w="1600">高清<small>1600 · 约 2.5 分钟</small></button>
-          <button data-w="0">最高<small>不缩放 · 大图很慢</small></button>
+          <button data-w="0">最高<small>不缩放 · 最清晰</small></button>
+        </div>
+        <div class="seg-hint" id="maxHint">
+          按原始尺寸描摹：4000px 的图约 4 分钟，产物可能超过 50 MB，手机浏览器可能因内存不足失败。
         </div>
       </div>
 
-      <div class="note" style="margin:-6px 0 14px">
-        小图会被自动放大 2 倍再描摹（轮廓更顺、色块更干净）。想要最清晰选「最高」。
-      </div>
 
       <div class="opt">
         <label>图片类型（影响是否先放大会降噪）</label>
@@ -220,6 +231,9 @@
           <button data-v="auto" class="on">自动<small>小图自动放大</small></button>
           <button data-v="none">照片<small>原样描摹</small></button>
           <button data-v="illust">插画<small>放大 + 降噪</small></button>
+        </div>
+        <div class="seg-hint show muted">
+          小图会被自动放大 2 倍再描摹（轮廓更顺、色块更干净）。
         </div>
       </div>
 
@@ -319,16 +333,10 @@
   let maxWidth = '800', preprocess = 'auto';
   seg('segSize', v => {
     maxWidth = v;
-    hint.style.display = (v === '0') ? 'block' : 'none';
+    // 「最高」档才会慢/大，把提示显出来
+    $('maxHint').classList.toggle('show', v === '0');
   });
   seg('segType', v => { preprocess = v; });
-
-  /* 选「最高」档时提示耗时（大图会很慢） */
-  const hint = document.createElement('div');
-  hint.className = 'note';
-  hint.style.cssText = 'display:none;margin:-6px 0 14px;color:#c9a227';
-  hint.textContent = '「最高」按原始尺寸描摹：4000px 的图约 4 分钟、产物可能超过 50 MB，浏览器内存紧张时会失败。';
-  $('segSize').parentNode.appendChild(hint);
 
   /* ---------- 选图 ---------- */
   function show(f){
