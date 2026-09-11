@@ -88,6 +88,35 @@ def check_no_drift():
         ok("三个同名脚本内容一致（%s）" % "、".join(pairs))
 
 
+def check_installed_skill():
+    """如果本机装了 skill，检查它有没有落后于仓库里的 skill/。
+    这一步专治「改了仓库忘了同步已安装副本」。"""
+    print("\n[4b/6] 已安装的 skill 是否落后")
+    installed = [os.path.expanduser("~/.claude/skills/image-to-css-art"),
+                 os.path.expanduser("~/.agents/skills/image-to-css-art"),
+                 "/skills/image-to-css-art"]
+    found = [p for p in installed if os.path.isdir(p)]
+    if not found:
+        print("  （本机没装 skill，跳过）")
+        return
+    repo = os.path.join(ROOT, "skill")
+    for inst in found:
+        stale = []
+        for root, dirs, files in os.walk(repo):
+            dirs[:] = [d for d in dirs if d != "__pycache__"]
+            for f in files:
+                rel = os.path.relpath(os.path.join(root, f), repo)
+                a = os.path.join(repo, rel)
+                b = os.path.join(inst, rel)
+                if not os.path.exists(b) or digest(a) != digest(b):
+                    stale.append(rel)
+        if stale:
+            bad("已安装的 skill 落后 %d 个文件：%s" % (len(stale), inst))
+            print("       同步：cp -r %s/. %s/" % (repo, inst))
+        else:
+            ok("已安装的 skill 与仓库一致（%s）" % inst)
+
+
 def check_skill():
     print("\n[4/6] skill/ 完整性")
     skill = os.path.join(ROOT, "skill")
@@ -189,7 +218,8 @@ def check_render():
 
 def main():
     print("photo-to-svg 自检 —— %s" % ROOT)
-    check_deps(); check_syntax(); check_no_drift(); check_skill(); check_docs()
+    check_deps(); check_syntax(); check_no_drift(); check_skill()
+    check_installed_skill(); check_docs()
     if "--render" in sys.argv:
         check_render()
     else:
