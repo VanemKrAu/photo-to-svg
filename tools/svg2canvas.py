@@ -302,6 +302,19 @@ TEMPLATE = r'''<!DOCTYPE html>
   #toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(10,10,16,.86);
     border:1px solid var(--line);border-radius:8px;padding:10px 16px;font-size:13px;display:none;pointer-events:none}
 
+  /* 缩放控件：浮在画框右下角 */
+  .zoombar{position:absolute;right:10px;bottom:10px;display:flex;gap:3px;z-index:5;
+    background:rgba(10,10,16,.74);border:1px solid var(--line);border-radius:9px;
+    padding:4px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+  .zoombar button{font:inherit;font-size:13px;line-height:1;color:var(--text);
+    background:transparent;border:0;border-radius:6px;padding:6px 8px;cursor:pointer;
+    min-width:30px;text-align:center;flex:0 0 auto}
+  .zoombar .lvl{font-size:11px;color:var(--dim);padding:6px 3px;min-width:44px;
+    text-align:center;font-variant-numeric:tabular-nums}
+  @media (hover:hover) and (pointer:fine){
+    .zoombar button:hover{background:#232338}
+  }
+
   /* ---------- 桌面端 / 宽屏适配 ---------- */
   /* 窄屏：倍速组单独一行，永远点得到 */
   @media (max-width:640px){
@@ -353,6 +366,13 @@ TEMPLATE = r'''<!DOCTYPE html>
     <div id="ghost"></div>
     <div id="split"></div>
     <div id="toast">绘制中…</div>
+    <div class="zoombar" id="zoombar">
+      <button id="zOut" title="缩小（滚轮 / 双指捏合）">−</button>
+      <span class="lvl" id="zLvl">100%</span>
+      <button id="zIn" title="放大（滚轮 / 双指捏合）">＋</button>
+      <button id="zFit" title="适应窗口（按 0）">⤢</button>
+      <button id="zRst" title="实际大小（按 1）">1:1</button>
+    </div>
   </div>
   <div id="side"><div class="tag">原图</div></div>
 </div>
@@ -369,7 +389,7 @@ TEMPLATE = r'''<!DOCTYPE html>
     <button id="reset" title="回到开头">↺</button>
     <button id="ghostBtn" class="on" title="显示/隐藏原图对照">对照</button>
     <button id="full" title="全屏（F）">⛶ 全屏</button>
-    <span class="keys">空格 播放 · ←→ 快进退 · F 全屏</span>
+    <span class="keys">空格 播放 · ←→ 快进退 · 滚轮缩放 · 0 适应 · F 全屏</span>
     <div style="flex:1 1 auto;min-width:8px"></div>
     <div class="sp">
       <button data-s="0.5">0.5×</button>
@@ -385,6 +405,10 @@ TEMPLATE = r'''<!DOCTYPE html>
 (function(){
 "use strict";
 var CV=document.getElementById("art"), W=__W__, H=__H__;
+/* 缩放状态。必须在这里就定义：下面的 layout() 会立即执行并读它。 */
+var fitScale = 1;                       /* 适应窗口时 1 画布像素 = fitScale 屏幕像素 */
+var zoom = { s: 1, tx: 0, ty: 0 };
+
 var DEC=__DEC__;                       /* 顶点解码因子：顶点值 × DEC = 画布坐标 */
 var ctx=CV.getContext("2d",{alpha:false});
 var b64=document.getElementById("payload").textContent.trim().replace(/\s+/g,"");
@@ -595,6 +619,10 @@ document.addEventListener("keydown",function(e){
   else if(e.key==="Home"){ e.preventDefault(); pause(); seekTo(0); }
   else if(e.key==="End"){ e.preventDefault(); pause(); seekTo(N); }
   else if(e.key==="f"||e.key==="F"){ e.preventDefault(); toggleFull(); }
+  else if(e.key==="0"){ e.preventDefault(); pause(); resetView(); }
+  else if(e.key==="1"){ e.preventDefault(); pause(); setZoom(1/fitScale); }
+  else if(e.key==="+"||e.key==="="){ e.preventDefault(); pause(); setZoom(zoom.s*1.4); }
+  else if(e.key==="-"||e.key==="_"){ e.preventDefault(); pause(); setZoom(zoom.s/1.4); }
 });
 
 /* ---- 精确布局：按可用空间等比缩放画框（不依赖 aspect-ratio 的浏览器实现） ---- */
@@ -615,11 +643,15 @@ function layout(){
     var w=Math.max(1,Math.floor(W*s)), h=Math.max(1,Math.floor(H*s));
     frame.style.width=w+"px";  frame.style.height=h+"px";
     sideEl.style.width=w+"px"; sideEl.style.height=h+"px";
+    fitScale = w / W;                       /* 1:1 按钮与快捷键要用它换算 */
+    if(zoom.s <= 1.0001) applyView();
   }else{
     sideEl.style.display="none";
     var s2=Math.min(aw/W, ah/H);
     frame.style.width =Math.max(1,Math.floor(W*s2))+"px";
     frame.style.height=Math.max(1,Math.floor(H*s2))+"px";
+    fitScale = s2;
+    if(zoom.s <= 1.0001) applyView();
   }
 }
 window.addEventListener("resize",layout);
@@ -627,6 +659,96 @@ window.addEventListener("orientationchange",function(){ setTimeout(layout,120); 
 if(window.ResizeObserver) new ResizeObserver(layout).observe(stageEl);
 if(document.fullscreenElement!==undefined) document.addEventListener("fullscreenchange",layout);
 layout();
+
+/* ==================== 缩放与平移 ====================
+   思路：画布本身不重绘，只给 <canvas> 套 CSS transform。
+   所以放到 2400% 也只是把已有像素放大，不掉帧。
+   变量 zoom.s 是「相对适应窗口」的倍数，1 = 刚好填满画框。 */
+function applyView(){
+  if(zoom.s <= 1.0001){ zoom.tx = 0; zoom.ty = 0; }
+  CV.style.transformOrigin = "0 0";
+  CV.style.transform = "translate(" + zoom.tx + "px," + zoom.ty + "px) scale(" + zoom.s + ")";
+  var zl = document.getElementById("zLvl");
+  if(zl) zl.textContent = Math.round(zoom.s * 100) + "%";
+}
+function clampPan(){
+  var maxX = Math.max(0, W * zoom.s - W), maxY = Math.max(0, H * zoom.s - H);
+  zoom.tx = Math.min(0, Math.max(-maxX, zoom.tx));
+  zoom.ty = Math.min(0, Math.max(-maxY, zoom.ty));
+}
+/* 以 (ax, ay) 为锚点缩放 —— 锚点是「相对画布左上角」的屏幕坐标。
+   推导：画布点 a 的屏幕位置 = tx + a*s；要让它缩放后位置不变，
+   则 tx' = p - (p - tx) * (s'/s)。 */
+function setZoom(ns, ax, ay){
+  ns = Math.min(24, Math.max(1, ns));
+  if(ax === undefined){ ax = W * zoom.s / 2; ay = H * zoom.s / 2; }
+  var k = ns / zoom.s;
+  zoom.tx = ax - (ax - zoom.tx) * k;
+  zoom.ty = ay - (ay - zoom.ty) * k;
+  zoom.s = ns;
+  clampPan();
+  applyView();
+}
+function resetView(){ zoom.s = 1; zoom.tx = 0; zoom.ty = 0; applyView(); }
+
+/* 滚轮：以指针位置为锚点 */
+frame.addEventListener("wheel", function(e){
+  e.preventDefault();
+  pause();
+  var r = CV.getBoundingClientRect();
+  setZoom(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX - r.left, e.clientY - r.top);
+}, { passive:false });
+
+/* 触屏：双指捏合缩放、放大后单指拖动平移 */
+var ptrs = {}, pinch = null, pan = null;
+frame.addEventListener("pointerdown", function(e){
+  ptrs[e.pointerId] = { x:e.clientX, y:e.clientY };
+  var ids = Object.keys(ptrs);
+  if(ids.length === 2){
+    var a = ptrs[ids[0]], b = ptrs[ids[1]];
+    pinch = { d: Math.hypot(a.x-b.x, a.y-b.y), s: zoom.s,
+              cx:(a.x+b.x)/2, cy:(a.y+b.y)/2 };
+    pan = null;
+  } else if(zoom.s > 1.0001){
+    pan = { x:e.clientX, y:e.clientY, tx:zoom.tx, ty:zoom.ty };
+  }
+});
+frame.addEventListener("pointermove", function(e){
+  if(!ptrs[e.pointerId]) return;
+  ptrs[e.pointerId] = { x:e.clientX, y:e.clientY };
+  var ids = Object.keys(ptrs);
+  if(pinch && ids.length >= 2){
+    e.preventDefault();
+    var a = ptrs[ids[0]], b = ptrs[ids[1]];
+    var d = Math.hypot(a.x-b.x, a.y-b.y);
+    if(d > 0) setZoom(pinch.s * (d / pinch.d), pinch.cx, pinch.cy);
+  } else if(pan){
+    e.preventDefault();
+    zoom.tx = pan.tx + (e.clientX - pan.x);
+    zoom.ty = pan.ty + (e.clientY - pan.y);
+    clampPan(); applyView();
+  }
+}, { passive:false });
+function endPtr(e){
+  delete ptrs[e.pointerId];
+  if(Object.keys(ptrs).length < 2) pinch = null;
+  if(Object.keys(ptrs).length === 0) pan = null;
+}
+frame.addEventListener("pointerup", endPtr);
+frame.addEventListener("pointercancel", endPtr);
+
+/* 双击画面：1× ⇄ 2.5× 切换（全屏改用按钮或 F 键） */
+CV.addEventListener("dblclick", function(e){
+  var r = CV.getBoundingClientRect();
+  if(zoom.s > 1.01) resetView();
+  else setZoom(2.5, e.clientX - r.left, e.clientY - r.top);
+});
+
+/* 控件按钮 */
+document.getElementById("zIn").onclick  = function(){ pause(); setZoom(zoom.s * 1.4); };
+document.getElementById("zOut").onclick = function(){ pause(); setZoom(zoom.s / 1.4); };
+document.getElementById("zFit").onclick = function(){ pause(); resetView(); };
+document.getElementById("zRst").onclick = function(){ pause(); setZoom(1 / fitScale); };
 
 clearAll(); syncUI();
 setTimeout(function(){ layout(); play(); },600);
