@@ -1,0 +1,6 @@
+interface:
+  display_name: "Image to CSS Art"
+  short_description: "Trace reference images into standalone pure HTML and CSS art."
+  default_prompt: "Use $image-to-css-art to trace my reference image into a faithful standalone HTML/CSS illustration."
+policy:
+  allow_implicit_invocation: true

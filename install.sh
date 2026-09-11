@@ -83,6 +83,17 @@ for f in glob.glob('$HERE/tools/*.py'):
     ast.parse(open(f,encoding='utf-8').read())
 print('  ✓ tools/ 下 %d 个脚本语法正常' % len(glob.glob('$HERE/tools/*.py')))"
 
+say "附：把 skill 装进 agent（可选）"
+cat <<SKILLHINT
+  本仓库的 skill/ 是上游 image-to-css-art 的原样副本 + 本项目的 SVG 扩展。
+  想让 AI 助手直接用，复制到它的 skills 目录即可：
+
+    cp -r "$HERE/skill" ~/.claude/skills/image-to-css-art     # Claude Code
+    cp -r "$HERE/skill" ~/.agents/skills/image-to-css-art     # 通用 skills 目录
+
+  装好后直接说「把这张图转成 SVG」，它会读 SKILL.md 和 AGENTS.md 按流程执行。
+SKILLHINT
+
 cat <<EOF
 
 ────────────────────────────────────────────────────────

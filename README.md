@@ -5,6 +5,10 @@
 不是简单的"图片转矢量"——它模拟人的作画顺序：**先勾线稿 → 再铺大色块 → 最后抠细节**，
 每一步都按"视觉重量"分配时间，大笔慢慢铺、小笔快带过，像看一段绘画录像。
 
+> 建立在 [**AvroraCL/image-to-css-art**](https://github.com/AvroraCL/image-to-css-art)（MIT）之上。
+> 上游提供算法管线与本 skill 本体，本项目在此之上加了 SVG 输出与完整回放页。
+> 详见 [`ATTRIBUTION.md`](ATTRIBUTION.md)。
+
 ```
    真实照片                              SVG 描摹（172,471 个色块 + 1,527 笔线稿）
 ┌──────────────────┐                  ┌──────────────────┐
@@ -61,6 +65,30 @@ bash install.sh                       # 约 1 分钟，装依赖 + 自检
 
 ---
 
+## 装成 Agent Skill（可选）
+
+`skill/` 是上游 skill 的原样副本 + 本项目的 SVG 扩展，可以直接丢给 AI 助手用：
+
+```bash
+# Claude Code
+cp -r skill ~/.claude/skills/image-to-css-art
+
+# 通用 skills 目录
+cp -r skill ~/.agents/skills/image-to-css-art
+```
+
+装好后，你说「把这张图转成 SVG」，助手就会读到 `skill/SKILL.md` 和
+`AGENTS.md` 里的规则，按既定流程执行。
+
+> **两个产物形态怎么选**
+>
+> | 需求 | 用什么 |
+> |---|---|
+> | 纯 HTML + CSS、有资源限制（禁 img/svg/script/base64/外链） | 上游原版 `skill/scripts/image_to_css.py` |
+> | 要矢量 `.svg` 文件、或想看绘制过程回放 | 本项目 `tools/make_art.py` |
+
+---
+
 ## 实测数据
 
 | 作品 | 尺寸 | 形状数 | 线稿笔 | SVG | HTML | SSIM |
@@ -93,10 +121,11 @@ bash install.sh                       # 约 1 分钟，装依赖 + 自检
 
 | 文件 | 内容 |
 |---|---|
+| [`ATTRIBUTION.md`](ATTRIBUTION.md) | **出处、上游项目、许可** |
 | [`docs/原理与流程.md`](docs/原理与流程.md) | 整条流水线怎么走的、数据格式、关键设计 |
 | [`docs/参数速查.md`](docs/参数速查.md) | 每个参数怎么选、不同图类型的经验值 |
 | [`docs/踩坑记录.md`](docs/踩坑记录.md) | **12 个真实踩过的坑**及修法（改代码前必读） |
-| [`AGENTS.md`](AGENTS.md) | 给 AI 助手的操作规则（在这台设备上让它直接照做） |
+| [`AGENTS.md`](AGENTS.md) | 给 AI 助手的操作规则（让它直接照做） |
 | [`SETUP.md`](SETUP.md) | 换设备 / 换系统的详细安装步骤 |
 
 ---
@@ -107,11 +136,17 @@ bash install.sh                       # 约 1 分钟，装依赖 + 自检
 photo-to-svg/
 ├── install.sh              一键安装
 ├── requirements.txt
-├── tools/
-│   ├── make_art.py         ★ 入口：串联全流程 + 尺寸自检
-│   ├── build_svg_art.py    描摹核心
+├── skill/                  ★ 上游 skill 原样副本（MIT）+ 本项目 extras
+│   ├── SKILL.md
+│   ├── LICENSE             上游 MIT 许可（分发时请保留）
+│   ├── scripts/            上游原版：CSS clip-path 输出
+│   ├── references/         上游参数调优文档
+│   └── extras/             ★ 本项目新增：SVG 输出 + 保真度校验
+├── tools/                  ★ 本项目新增：完整流水线
+│   ├── make_art.py         入口（串联全流程 + 尺寸自检）
+│   ├── build_svg_art.py    描摹核心（与 skill/extras/ 同一份）
 │   ├── svg2canvas.py       SVG → Canvas 回放页
-│   ├── verify_svg.py       保真度校验（MAE + 对比图）
+│   ├── verify_svg.py       保真度校验（与 skill/extras/ 同一份）
 │   └── secret_scan.py      推送前密钥自检
 ├── docs/                   文档
 ├── examples/               示例图
@@ -120,6 +155,11 @@ photo-to-svg/
 
 ---
 
-## 授权
+## 致谢
 
-工具脚本可自由使用。示例图片来自公开照片，仅作演示。
+- **[AvroraCL/image-to-css-art](https://github.com/AvroraCL/image-to-css-art)** —— 算法管线与 skill 本体，MIT 许可
+- 本项目的 SVG 输出、Canvas 回放页、时间轴设计、以及那 12 条踩坑记录，都是在它之上做的
+
+## 许可
+
+MIT。`skill/` 下的上游代码版权归 AvroraCL（见 `skill/LICENSE`），分发时请保留该文件。

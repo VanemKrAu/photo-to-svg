@@ -6,6 +6,19 @@
 
 ---
 
+## 关于这个仓库
+
+本项目建立在 **[AvroraCL/image-to-css-art](https://github.com/AvroraCL/image-to-css-art)**（MIT）之上：
+
+- `skill/` = 上游 skill 的**原样副本**（含 `LICENSE`），可直接装进 agent 的 skills 目录
+- `skill/extras/` = 本项目新增的 SVG 输出扩展
+- `tools/` = 本项目的完整流水线（**日常只用它**）
+- 上游原版输出的是 CSS `clip-path`；本项目输出真正的 SVG + Canvas 回放页
+
+出处与许可详见 [`ATTRIBUTION.md`](ATTRIBUTION.md)。
+
+---
+
 ## 0. 环境自检（第一次用）
 
 ```bash
@@ -13,6 +26,13 @@ bash install.sh          # 装依赖 + 自检，约 1 分钟
 ```
 
 装完记下打印出来的 python 路径（通常是 `<项目>/.venv/bin/python`），下面用 `$PY` 指代。
+
+如果这台设备上的 agent 还没装这个 skill，装上：
+
+```bash
+cp -r skill ~/.claude/skills/image-to-css-art      # Claude Code
+cp -r skill ~/.agents/skills/image-to-css-art      # 通用 skills 目录
+```
 
 ---
 
