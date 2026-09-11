@@ -141,11 +141,11 @@ photo-to-svg/
 │   ├── LICENSE             上游 MIT 许可（分发时请保留）
 │   ├── scripts/            上游原版：CSS clip-path 输出
 │   ├── references/         上游参数调优文档
-│   └── extras/             ★ 本项目新增：SVG 输出 + 保真度校验
+│   └── extras/             ★ 本项目新增：SVG 输出 + Canvas 回放页 + 保真度校验
 ├── tools/                  ★ 本项目新增：完整流水线
 │   ├── make_art.py         入口（串联全流程 + 尺寸自检）
 │   ├── build_svg_art.py    描摹核心（与 skill/extras/ 同一份）
-│   ├── svg2canvas.py       SVG → Canvas 回放页
+│   ├── svg2canvas.py       SVG → Canvas 回放页（与 skill/extras/ 同一份）
 │   ├── verify_svg.py       保真度校验（与 skill/extras/ 同一份）
 │   └── secret_scan.py      推送前密钥自检
 ├── docs/                   文档

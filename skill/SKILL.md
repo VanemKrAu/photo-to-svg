@@ -73,17 +73,19 @@ remaining visual differences candidly. Do not claim pixel-perfect or hand-drawn 
 
 ## Local extension: SVG output & replay page
 
-`extras/` adds two scripts that reuse this skill's pipeline (quantize → adjacent merge →
+`extras/` adds three scripts that reuse this skill's pipeline (quantize → adjacent merge →
 contours → even-odd polygons) but emit **real SVG `<path>`** instead of CSS `clip-path`,
 plus a stroke-by-stroke replay page rendered on Canvas.
 
 | Script | Use when the user |
 | --- | --- |
 | `extras/build_svg_art.py` | wants a vector `.svg` file, or asks to watch/replay the drawing process |
+| `extras/svg2canvas.py` | wants a replay page that stays fluid on a phone (DOM holds one `<canvas>`, geometry rides in a binary payload) |
 | `extras/verify_svg.py` | needs the result quantitatively checked (rasterize + MAE, full image and foreground) |
 
-For the full pipeline (SVG + Canvas replay page in one command) see the repository root:
-`tools/make_art.py`, documented in `../README.md` and `../AGENTS.md`.
+For the full pipeline (SVG + Canvas replay page in one command) see
+<https://github.com/VanemKrAu/photo-to-svg>: `tools/make_art.py`,
+documented in its `README.md` and `AGENTS.md`.
 
 `--dark-cut` (default 14) flattens pixels matching the matte. This matters for dark photos,
 whose near-black background is full of JPEG noise that would otherwise become hundreds of

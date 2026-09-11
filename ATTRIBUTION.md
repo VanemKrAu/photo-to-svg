@@ -40,12 +40,13 @@
 
 ### 2. 新增了 SVG 输出扩展（`skill/extras/`）
 
-上游产物是 CSS `<div>` 堆叠；`extras/` 里的两个脚本复用同一套管线，
+上游产物是 CSS `<div>` 堆叠；`extras/` 里的三个脚本复用同一套管线，
 但输出**真正的 SVG `<path>`**：
 
 | 脚本 | 作用 |
 |---|---|
 | `extras/build_svg_art.py` | 描摹成 SVG（`<path>` + `fill-rule="evenodd"` 挖洞 + `linearGradient`）+ 生成逐笔回放页 |
+| `extras/svg2canvas.py` | 把 SVG 改造成 Canvas 回放页（DOM 只留 1 个 `<canvas>`，手机上流畅播放） |
 | `extras/verify_svg.py` | 栅格化重绘算 MAE，出三联对比图 |
 
 这两个脚本**不修改上游任何文件**，整个 `extras/` 可独立删除。
