@@ -31,14 +31,33 @@ OUT_ROOT = os.environ.get("SVG_ART_OUT") or os.path.join(os.path.dirname(TOOLS),
 
 
 def pick_background(photo):
-    """取原图高频色当底色；同时判断是不是暗背景图。"""
+    """选底色。这个值会决定「哪些颜色整簇被跳过」，选错会让一片区域直接消失。
+
+    * 照片（有统一背景，如天空/沙滩）：底色 = 最高频色，占比通常 >5%，安全。
+    * 插画（没有统一背景）：最高频色可能只占 1%，用它作底会挖掉画面内容。
+      实测某插画：底取高频色 → SSIM 0.9060；换用画面中不存在的浅色 → 0.9276。
+      所以占比过低时改用「画面中不存在的中性色」，靠同色描边把缝隙填住。
+    """
     im = np.array(Image.open(photo).convert("RGB"))
-    q = (im.reshape(-1, 3) // 8 * 8)
+    flat = im.reshape(-1, 3)
+    q = (flat // 8 * 8)
     cols, cnt = np.unique(q, axis=0, return_counts=True)
-    bg = cols[int(np.argmax(cnt))]
-    hexbg = "#%02x%02x%02x" % tuple(int(v) for v in bg)
+    top = int(np.argmax(cnt))
+    bg = cols[top]
+    ratio = cnt[top] / len(flat)
     lum = 0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2]
-    return hexbg, (14 if lum < 60 else 0), int(im.shape[1]), int(im.shape[0])
+
+    if ratio >= 0.05:                       # 有统一背景，照常用
+        hexbg = "#%02x%02x%02x" % tuple(int(v) for v in bg)
+        return hexbg, (14 if lum < 60 else 0), int(im.shape[1]), int(im.shape[0])
+
+    # 没有统一背景：选一个与画面最不接近的中性色
+    mean_lum = float(0.2126 * flat[:, 0].mean() + 0.7152 * flat[:, 1].mean()
+                     + 0.0722 * flat[:, 2].mean())
+    cand = "#f0f0f0" if mean_lum >= 96 else "#101010"
+    print("底色：最高频色只占 %.1f%%（无统一背景）→ 改用 %s 作底，避免挖掉画面内容"
+          % (ratio * 100, cand))
+    return cand, 0, int(im.shape[1]), int(im.shape[0])
 
 
 def run(cmd, **kw):
