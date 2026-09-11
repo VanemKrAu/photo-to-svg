@@ -86,6 +86,16 @@
     color:#9a9ab8;white-space:pre-wrap;word-break:break-all
   }
   .err{color:var(--err)}
+  .cacherow{display:flex;align-items:center;justify-content:space-between;
+    gap:10px;flex-wrap:wrap;margin-top:10px;padding-top:9px;border-top:1px solid #4a3c12}
+  #cacheInfo{font-size:12px}
+  #cacheInfo b{color:#f0d68a}
+  #clearCache{font:inherit;font-size:12px;color:#e8c97a;background:transparent;
+    border:1px solid #6b5416;border-radius:7px;padding:4px 10px;cursor:pointer}
+  #clearCache:hover{background:#3a2c0d}
+  #clearCache:disabled{opacity:.45;cursor:default}
+  .barinfo{font-size:11.5px;color:var(--dim);margin-top:6px}
+  .barinfo b{color:var(--gold)}
 
   /* 结果 */
   #result{display:none}
@@ -168,7 +178,11 @@
   <div class="wrap grid">
 
     <div class="warn" id="bootWarn">
-      ⏳ 首次使用需要下载约 30 MB 的 Python 运行时（含 OpenCV），请耐心等待一次；之后会走浏览器缓存，秒开。
+      ⏳ 首次使用需要下载约 21 MB 的 Python 运行时（含 OpenCV），请耐心等待一次。
+      <div class="cacherow">
+        <span id="cacheInfo">正在检查本地缓存…</span>
+        <button id="clearCache" type="button">清除运行时缓存</button>
+      </div>
     </div>
 
     <!-- 1 选图 -->
@@ -229,6 +243,7 @@
       <div id="progWrap">
         <div class="bar" id="bar"><i id="barFill"></i></div>
         <div id="status">准备中…</div>
+        <div class="barinfo" id="netInfo"></div>
         <div id="log"></div>
       </div>
 
@@ -566,9 +581,26 @@
       } else if(m.type === 'ready'){
         ready = true;
         bar.classList.remove('indet');
+        // 包装好了就把提示条收起来，但保留缓存信息（挪到进度区显示）
         $('bootWarn').style.display = 'none';
+        refreshCacheInfo();
         go.disabled = !file;
         if(!busy) status.textContent = '就绪';
+      } else if(m.type === 'cacheinfo'){
+        showCacheInfo(m);
+      } else if(m.type === 'cachecleared'){
+        $('clearCache').disabled = false;
+        showCacheInfo({ count: 0, bytes: 0, supported: m.freed !== undefined });
+        alert('已清除运行时缓存，释放 ' + fmtSize(m.freed || 0) + '。\n下次打开需要重新下载。');
+      } else if(m.type === 'cache'){
+        // 实时告诉用户：这次是读缓存还是走网络
+        const s = m.stats || {};
+        if(m.state === 'hit'){
+          $('netInfo').innerHTML = '本次运行：已从本地缓存读取 <b>' + s.cached + '</b> 个文件（不消耗流量）';
+        } else {
+          $('netInfo').innerHTML = '本次运行：正在下载 <b>' + (s.bytes/1048576).toFixed(1) +
+            ' MB</b>（' + s.files + ' 个文件），之后会缓存到本地';
+        }
       } else if(m.type === 'log'){
         if(m.text.startsWith('{"_progress"')){
           try{
@@ -599,6 +631,22 @@
   }
 
   function mb(n){ return (n / 1048576).toFixed(1) + ' MB'; }
+
+  function showCacheInfo(m){
+    const el = $('cacheInfo');
+    if(!m.supported){ el.textContent = '当前浏览器不支持本地缓存，每次都要下载。'; return; }
+    if(m.count){
+      el.innerHTML = '✓ 运行时已缓存到本机：<b>' + m.count + ' 个文件 · ' + fmtSize(m.bytes) +
+                     '</b>，下次打开直接读取。';
+    } else {
+      el.innerHTML = '尚未缓存，本次会下载约 21 MB。';
+    }
+  }
+
+  async function refreshCacheInfo(){
+    if(!worker) return;
+    worker.postMessage({ type: 'cachesummary' });
+  }
 
   async function onDone(m){
     busy = false;
@@ -660,6 +708,14 @@
       maxWidth: parseInt(maxWidth, 10),
       preprocess: preprocess,
     }, [buf]);
+  });
+
+  $('clearCache').addEventListener('click', () => {
+    if(!worker) return;
+    if(!confirm('清除已缓存的 Python 运行时（约 21 MB）？\n\n' +
+                '下次打开需要重新下载，换不来任何好处，除非你遇到了加载异常。')) return;
+    $('clearCache').disabled = true;
+    worker.postMessage({ type: 'clearcache' });
   });
 
   /* 启动 */

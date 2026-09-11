@@ -46,6 +46,75 @@ const APP_FILES = [
 let py = null;
 const post = (msg) => self.postMessage(msg);
 
+/* ---------------- 本地缓存（Cache Storage API） ----------------
+ * 为什么不靠浏览器 HTTP 缓存：
+ *   CDN 给的确实是 max-age=31536000，但 HTTP 缓存由浏览器全权管理 ——
+ *   手机浏览器/应用内 WebView/隐私模式都可能在后台清掉它，
+ *   30 MB 的体积也容易被当成「可回收」优先淘汰。
+ * 所以这里用 Cache Storage 显式存一份（配额通常几百 MB 起，且只有我们自己能删）。
+ * 效果：第二次打开直接从磁盘读，不再走网络。
+ */
+const CACHE_NAME = 'pyodide-' + PYODIDE_VERSION;
+const CACHE_HOSTS = /^https:\/\/(cdn\.jsdelivr\.net|unpkg\.com)\//;
+let cache = null;
+
+const netStats = { files: 0, bytes: 0, cached: 0 };
+
+async function openCache() {
+  if (cache) return cache;
+  if (!self.caches) return null;          // 极老的浏览器没有 Cache Storage
+  try { cache = await caches.open(CACHE_NAME); } catch (_) { cache = null; }
+  return cache;
+}
+
+/* 拦下 Pyodide 自己的 fetch：先查缓存，未命中再走网络并存起来 */
+function installCacheLayer() {
+  const originalFetch = self.fetch.bind(self);
+  self.fetch = async function (input, init) {
+    const url = typeof input === 'string' ? input
+              : (input && input.url) ? input.url : String(input);
+    const c = await openCache();
+    // 非 CDN 资源（本站脚本）不缓存；带 Range 的请求也不能直接用整份缓存顶替
+    const rangeHeader = init && init.headers &&
+      (init.headers.get ? init.headers.get('range') : init.headers.range);
+    if (!c || !CACHE_HOSTS.test(url) || rangeHeader) {
+      return originalFetch(input, init);
+    }
+    try {
+      const hit = await c.match(url);
+      if (hit) {
+        netStats.cached++;
+        post({ type: 'cache', state: 'hit', url, stats: netStats });
+        return hit;
+      }
+    } catch (_) {}
+    const resp = await originalFetch(input, init);
+    if (resp && resp.ok) {
+      const len = Number(resp.headers.get('content-length') || 0);
+      netStats.files++; netStats.bytes += len;
+      post({ type: 'cache', state: 'miss', url, bytes: len, stats: netStats });
+      // 后台写入，不阻塞 Pyodide 使用这个响应
+      c.put(url, resp.clone()).catch(() => {});
+    }
+    return resp;
+  };
+}
+
+/* 查缓存里已经存了多少（主线程也能查，用来在界面上显示） */
+async function cacheSummary() {
+  const c = await openCache();
+  if (!c) return { count: 0, bytes: 0, supported: false };
+  try {
+    const keys = await c.keys();
+    let bytes = 0;
+    for (const req of keys) {
+      const r = await c.match(req);
+      if (r) bytes += Number(r.headers.get('content-length') || 0);
+    }
+    return { count: keys.length, bytes, supported: true };
+  } catch (_) { return { count: 0, bytes: 0, supported: false }; }
+}
+
 /* 带进度回调的取文件（运行时 30 MB，得让用户看到在动） */
 async function fetchBytes(url, label) {
   const r = await fetch(url);
@@ -108,6 +177,12 @@ async function bootRuntime() {
 }
 
 async function boot() {
+  installCacheLayer();
+  const pre = await cacheSummary();
+  post({ type: 'cacheinfo', ...pre });
+  if (pre.count) {
+    post({ type: 'status', text: `运行时已在本地缓存（${pre.count} 个文件），直接读取…` });
+  }
   py = await bootRuntime();
 
   post({ type: 'status', text: '正在加载 numpy / OpenCV / Pillow…' });
@@ -169,6 +244,26 @@ def _go(cfg):
 self.onmessage = async (ev) => {
   const m = ev.data;
   try {
+    if (m.type === 'cachesummary') {
+      post({ type: 'cacheinfo', ...(await cacheSummary()) });
+      return;
+    }
+    if (m.type === 'clearcache') {
+      let freed = 0;
+      try {
+        const c = await openCache();
+        if (c) {
+          const keys = await c.keys();
+          for (const req of keys) {
+            const r = await c.match(req);
+            if (r) freed += Number(r.headers.get('content-length') || 0);
+          }
+          for (const req of keys) await c.delete(req);
+        }
+      } catch (_) {}
+      post({ type: 'cachecleared', freed });
+      return;
+    }
     if (m.type === 'boot') {
       if (!py) await boot();
       else post({ type: 'ready' });
