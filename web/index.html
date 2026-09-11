@@ -157,8 +157,10 @@
     border-color:#a98a1c;color:#1a1200;font-weight:600}
   .hitem .acts button.del{color:var(--dim)}
   .hempty{color:var(--dim);font-size:12.5px;padding:14px 2px;text-align:center}
-  .empty{color:var(--dim);font-size:12.5px;line-height:1.7;padding:18px 14px;text-align:center;
-    border:1px dashed var(--line);border-radius:10px;background:var(--panel2)}
+  /* 结果卡的空状态：只留一行淡淡的提示，不铺底色、不画框 ——
+     之前是「灰底 + 虚线框」的横条，在页面最底部看着像多出来一条灰条 */
+  .empty{color:var(--dim);font-size:12.5px;line-height:1.7;padding:6px 2px 2px;text-align:left}
+  .empty b{color:#9aa7b8;font-weight:600}
   @media (max-width:640px){
     .hitem{flex-wrap:wrap}
     .hitem .acts{width:100%;justify-content:flex-start}
@@ -315,7 +317,7 @@
     <div class="card" id="outCard">
       <h2>4 · 结果</h2>
       <div class="empty" id="resultEmpty">
-        还没有结果。左边选好图、点「开始生成」，完成后的预览与下载会出现在这里。
+        <b>还没有结果。</b><br>选好图，点「开始生成」——预览和下载会出现在这里。
       </div>
 
       <div id="result">
