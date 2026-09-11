@@ -97,6 +97,17 @@
     color:#1a1200;background:linear-gradient(180deg,#e0b83a,var(--gold));border:1px solid #a98a1c;
     border-radius:8px;padding:9px}
   .file a:hover{background:linear-gradient(180deg,#f0c94a,#d9b02e)}
+  .openbtn{
+    display:flex;align-items:center;gap:13px;text-decoration:none;
+    background:linear-gradient(135deg,#1c2b1e,#16241a);border:1px solid #2c5738;
+    border-radius:11px;padding:14px 18px;margin-bottom:12px;color:#d6f0dc;
+    transition:background .13s,border-color .13s,transform .1s
+  }
+  .openbtn:hover{background:linear-gradient(135deg,#22361f,#1a2c1e);border-color:#3f7a4d}
+  .openbtn:active{transform:translateY(1px)}
+  .openbtn .ar{font-size:19px;color:#5fd07a;line-height:1}
+  .openbtn b{display:block;font-size:14.5px;font-weight:650;color:#e6fbe9}
+  .openbtn small{display:block;font-size:11.5px;color:#7fa98a;margin-top:2px}
   #frame{width:100%;height:520px;border:1px solid var(--line);border-radius:10px;background:#000}
   .note{font-size:11.5px;color:var(--dim);margin-top:10px}
   .warn{background:#2a1f0d;border:1px solid #6b5416;color:#e8c97a;border-radius:9px;
@@ -145,11 +156,15 @@
       <div class="opt">
         <label>清晰度（越大越清晰，也越慢）</label>
         <div class="seg" id="segSize">
-          <button data-w="800" class="on">快速<small>长边 800 · 约 1 分钟</small></button>
-          <button data-w="1200">标准<small>长边 1200 · 约 1.5 分钟</small></button>
-          <button data-w="1600">高清<small>长边 1600 · 约 2.5 分钟</small></button>
-          <button data-w="0">原始<small>不缩放 · 3 分钟起</small></button>
+          <button data-w="800">快速<small>800 · 约 1 分钟</small></button>
+          <button data-w="1200" class="on">标准<small>1200 · 约 1.5 分钟</small></button>
+          <button data-w="1600">高清<small>1600 · 约 2.5 分钟</small></button>
+          <button data-w="0">最高<small>不缩放 · 最清晰</small></button>
         </div>
+      </div>
+
+      <div class="note" style="margin:-6px 0 14px">
+        小图会被自动放大 2 倍再描摹（轮廓更顺、色块更干净）。想要最清晰选「最高」。
       </div>
 
       <div class="opt">
@@ -185,20 +200,25 @@
       </div>
 
       <div id="result">
+        <a id="openHtml" class="openbtn" target="_blank" rel="noopener">
+          <span class="ar">▶</span>
+          <span><b>在新标签页打开回放页</b><small>全屏播放绘制过程，可发给别人</small></span>
+        </a>
+
         <div class="files">
           <div class="file">
             <div class="n">SVG 矢量图</div>
             <div class="s" id="szSvg">—</div>
-            <a id="dlSvg" download>下载 .svg</a>
+            <a id="dlSvg" download>⬇ 下载 .svg</a>
           </div>
           <div class="file">
             <div class="n">回放网页</div>
             <div class="s" id="szHtml">—</div>
-            <a id="dlHtml" download>下载 .html</a>
+            <a id="dlHtml" download>⬇ 下载 .html</a>
           </div>
         </div>
         <div class="note" id="doneNote"></div>
-        <div class="note">↓ 下面是生成的回放页实际效果，可以直接在这里播放</div>
+        <div class="note">↓ 也可以就在下面直接播放</div>
         <iframe id="frame" title="回放预览"></iframe>
       </div>
     </div>
@@ -333,17 +353,20 @@
     const htmlBlob = new Blob([m.html], { type: 'text/html' });
     const name = ($('title').value || 'artwork').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40) || 'artwork';
 
+    const urlSvg = URL.createObjectURL(svgBlob);
+    const urlHtml = URL.createObjectURL(htmlBlob);
     const a1 = $('dlSvg'), a2 = $('dlHtml');
-    a1.href = URL.createObjectURL(svgBlob); a1.download = name + '.svg';
-    a2.href = URL.createObjectURL(htmlBlob); a2.download = name + '.html';
+    a1.href = urlSvg;  a1.download = name + '.svg';
+    a2.href = urlHtml; a2.download = name + '.html';
+    // 用 <a target="_blank"> 而不是 window.open：不会被弹窗拦截，手机浏览器也更稳
+    $('openHtml').href = urlHtml;
     $('szSvg').textContent = mb(m.svgBytes);
     $('szHtml').textContent = mb(m.htmlBytes);
     $('doneNote').textContent =
       m.strokes.toLocaleString() + ' 个色块 · 画布 ' + m.size.join('×') +
       ' · 回放页可直接在手机或电脑打开';
 
-    $('frame').srcdoc = null;
-    $('frame').src = URL.createObjectURL(htmlBlob);
+    $('frame').src = urlHtml;
     $('result').style.display = 'block';
   }
 
