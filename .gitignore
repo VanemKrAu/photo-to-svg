@@ -1,0 +1,25 @@
+# 产物（每张图几十 MB，不进仓库）
+output/
+*.svg.bak
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# 校验产物
+/tmp/verify*
+
+# 系统 / 编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*~
+*.swp
