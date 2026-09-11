@@ -206,7 +206,7 @@
           <button data-w="800">快速<small>800 · 约 1 分钟</small></button>
           <button data-w="1200" class="on">标准<small>1200 · 约 1.5 分钟</small></button>
           <button data-w="1600">高清<small>1600 · 约 2.5 分钟</small></button>
-          <button data-w="0">最高<small>不缩放 · 最清晰</small></button>
+          <button data-w="0">最高<small>不缩放 · 大图很慢</small></button>
         </div>
       </div>
 
@@ -317,8 +317,18 @@
     });
   }
   let maxWidth = '800', preprocess = 'auto';
-  seg('segSize', v => { maxWidth = v; });
+  seg('segSize', v => {
+    maxWidth = v;
+    hint.style.display = (v === '0') ? 'block' : 'none';
+  });
   seg('segType', v => { preprocess = v; });
+
+  /* 选「最高」档时提示耗时（大图会很慢） */
+  const hint = document.createElement('div');
+  hint.className = 'note';
+  hint.style.cssText = 'display:none;margin:-6px 0 14px;color:#c9a227';
+  hint.textContent = '「最高」按原始尺寸描摹：4000px 的图约 4 分钟、产物可能超过 50 MB，浏览器内存紧张时会失败。';
+  $('segSize').parentNode.appendChild(hint);
 
   /* ---------- 选图 ---------- */
   function show(f){

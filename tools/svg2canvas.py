@@ -76,6 +76,15 @@ def parse_svg(path):
     mv = re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', head)
     CW = int(float(mv.group(1))) if mv else 1440
     CH = int(float(mv.group(2))) if mv else 2162
+
+    # 坐标按 Int16 存（省一半体积）。乘一个因子保留亚像素精度，
+    # 但乘完不能超过 Int16 上限 32767 —— 否则大图会 OverflowError。
+    #   长边 ≤3276 → ×10（0.1px）    ≤6553 → ×5     ≤16383 → ×2     更大 → ×1
+    # 溢出会一路跑到 [3/4] 输出 SVG 时才炸，所以这里必须按尺寸算准。
+    VMAX = 32767
+    span = max(CW, CH, 1)
+    SCALE = max(1, min(10, VMAX // span))
+    DEC = 1.0 / SCALE                       # 解码时用
     grads, gidx = [], {}
     vert = array.array('h')          # x,y 交替（坐标 ×10，Int16）
     areas = array.array('I')         # 每笔 bbox 面积（用于按视觉重量分配时间）
@@ -130,14 +139,15 @@ def parse_svg(path):
                     for r in g:
                         roffs.append(len(vert) // 2)
                         for pt in r:
-                            vert.append(int(round(pt[0] * 10))); vert.append(int(round(pt[1] * 10)))
+                            vert.append(int(round(pt[0] * SCALE)))
+                            vert.append(int(round(pt[1] * SCALE)))
                     areas.append(int(garea))
                     offs.append(len(vert) // 2)
                     nring.append(len(roffs))
                     cols.append(col)
                     n += 1
     return dict(n=n, nv=len(vert) // 2, nr=len(roffs), ng=len(grads), areas=areas,
-                w=CW, h=CH,
+                w=CW, h=CH, scale=SCALE,
                 vert=vert, offs=offs, cols=cols, nring=nring, roffs=roffs, grads=grads)
 
 
@@ -375,6 +385,7 @@ TEMPLATE = r'''<!DOCTYPE html>
 (function(){
 "use strict";
 var CV=document.getElementById("art"), W=__W__, H=__H__;
+var DEC=__DEC__;                       /* 顶点解码因子：顶点值 × DEC = 画布坐标 */
 var ctx=CV.getContext("2d",{alpha:false});
 var b64=document.getElementById("payload").textContent.trim().replace(/\s+/g,"");
 var raw=atob(b64), L=raw.length, bin=new Uint8Array(L);
@@ -401,8 +412,8 @@ function paintRange(from,to){
       var s=ROFF[r];
       var e=(r+1<NR && ROFF[r+1]<v1)?ROFF[r+1]:v1;
       if(e<=s) continue;
-      ctx.moveTo(V[s*2]*0.1, V[s*2+1]*0.1);
-      for(var v=s+1;v<e;v++) ctx.lineTo(V[v*2]*0.1, V[v*2+1]*0.1);
+      ctx.moveTo(V[s*2]*DEC, V[s*2+1]*DEC);
+      for(var v=s+1;v<e;v++) ctx.lineTo(V[v*2]*DEC, V[v*2+1]*DEC);
       ctx.closePath();
     }
     var c=COL[i];
@@ -415,8 +426,8 @@ function paintRange(from,to){
         var ss=ROFF[rr];
         var ee=(rr+1<NR && ROFF[rr+1]<v1)?ROFF[rr+1]:v1;
         if(ee<=ss) continue;
-        ctx.moveTo(V[ss*2]*0.1, V[ss*2+1]*0.1);
-        for(var vv=ss+1;vv<ee;vv++) ctx.lineTo(V[vv*2]*0.1, V[vv*2+1]*0.1);
+        ctx.moveTo(V[ss*2]*DEC, V[ss*2+1]*DEC);
+        for(var vv=ss+1;vv<ee;vv++) ctx.lineTo(V[vv*2]*DEC, V[vv*2+1]*DEC);
       }
       ctx.stroke();
       continue;
@@ -662,7 +673,7 @@ def main():
     st = float(sys.argv[7]) if len(sys.argv) > 7 else 0.28   # 线稿阶段时间占比
     print("解析 SVG…")
     d = parse_svg(src)
-    print("  画布 %d×%d" % (d['w'], d['h']))
+    print("  画布 %d×%d   顶点精度 1/%d px" % (d['w'], d['h'], d.get('scale', 10)))
     print("  色块笔 %d  环 %d  顶点 %d  渐变 %d" % (d['n'], d['nr'], d['nv'], d['ng']))
     if os.environ.get("NO_LINEART"):
         nline = 0
@@ -678,7 +689,8 @@ def main():
                 lro.append(len(lv) // 2)
                 sx = [int(x) for x, y in seg]; sy = [int(y) for x, y in seg]
                 for x, y in seg:
-                    lv.append(int(round(float(x) * 10))); lv.append(int(round(float(y) * 10)))
+                    lv.append(int(round(float(x) * d['scale'])))
+                    lv.append(int(round(float(y) * d['scale'])))
                 larea.append(max(1, (max(sx) - min(sx) + 2) * (max(sy) - min(sy) + 2)))
                 loffs.append(len(lv) // 2); lnr.append(len(lro))
                 lcols.append(0x02000000 | col)          # 0x02 = 这一笔用描边画，不填充
@@ -700,6 +712,7 @@ def main():
             .replace("__TITLE__", title)
             .replace("__NSTR__", "{:,}".format(d['n']))
             .replace("__W__", str(d['w'])).replace("__H__", str(d['h']))
+            .replace("__DEC__", repr(1.0 / d.get('scale', 10)))
             .replace("__DUR__", str(duration))
             .replace("__SP__", "%.4f" % (sp if sp > 0 else (nline / max(1, d['n']))))
             .replace("__ST__", str(st))
