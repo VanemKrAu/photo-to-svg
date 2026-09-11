@@ -1,4 +1,4 @@
-# photo-to-svg
+<h1 align="center">photo-to-svg</h1>
 
 把一张照片变成**逐笔绘制的 SVG 矢量插画**，并生成一个能回放整个作画过程的网页。
 
@@ -7,6 +7,8 @@
 ### ▶ [在线直接用 → vanemkrau.github.io/photo-to-svg](https://vanemkrau.github.io/photo-to-svg/)
 
 拖一张图进去就出 SVG 和回放网页 · 无需安装 · **图片不上传**（全在你浏览器里算）
+
+![网页版界面](examples/screenshot-web.png)
 
 </div>
 
