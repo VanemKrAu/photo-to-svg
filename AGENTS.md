@@ -30,7 +30,8 @@
   网页版下次部署就跟着变（`web_run.py` 也是直接 import 那两个脚本）
 - `smoke_test.py` 会检查 worker.js 声明的文件清单与实际发布内容是否一致
 - 改过界面后更新 README 那张截图：`python3 tools/shot_web.py`（需要 playwright）。
-  它把界面设成「已选好图、等待生成」的状态再截整页，默认输出覆盖 `examples/screenshot-web.png`
+  它把界面设成「已选好图、等待生成」的状态再截整页，默认输出覆盖 `examples/screenshot-web-pc.png`。
+  **更新截图时换个文件名**（如 `-pc2`），否则 GitHub 和浏览器会缓存旧图，用户看到的还是老的
 
 ---
 

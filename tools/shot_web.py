@@ -3,7 +3,7 @@
 """shot_web.py —— 给 web/ 界面拍一张「已选好图、等待生成」状态的截图，用来更新 README。
 
 用法：
-  python3 tools/shot_web.py web/index.html examples/screenshot-web.png
+  python3 tools/shot_web.py web/index.html examples/screenshot-web-pc.png
   python3 tools/shot_web.py web/index.html /tmp/shot.png --width 1440
 
 为什么要单独写个脚本：
@@ -90,7 +90,7 @@ async def run(page_path: str, out_path: str, width: int, height: int, full: bool
 def main():
     ap = argparse.ArgumentParser(description="给 web/ 界面拍 README 截图")
     ap.add_argument("html", nargs="?", default="web/index.html", help="界面文件")
-    ap.add_argument("out", nargs="?", default="examples/screenshot-web.png", help="输出 PNG")
+    ap.add_argument("out", nargs="?", default="examples/screenshot-web-pc.png", help="输出 PNG")
     ap.add_argument("--width", type=int, default=1440, help="视口宽（默认 1440，即 PC 两栏布局）")
     ap.add_argument("--height", type=int, default=900, help="视口高")
     ap.add_argument("--viewport", action="store_true", help="只截首屏，默认截整页")
