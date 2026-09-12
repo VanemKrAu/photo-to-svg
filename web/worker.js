@@ -281,7 +281,7 @@ self.onmessage = async (ev) => {
         name: m.name || 'artwork',
         title: m.title || '逐笔绘制回放',
         duration: m.duration || 90,
-        outline: m.outline ?? 0.15,
+        outline: m.outline ?? 0,      // 0 = 线稿不单独占时间；主线程没传就用新默认（别写回 0.15）
         epsilon: m.epsilon ?? 0.25,
         linewidth: m.linewidth ?? 2.6,
         max_width: m.maxWidth || 0,

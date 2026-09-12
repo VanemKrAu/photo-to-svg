@@ -624,7 +624,12 @@
     let text;
     try{ text = await rec.html.text(); }catch(_){ return rec.html; }
     rec._axisDone = true;
-    if(text.indexOf("Math.sqrt(AREA[i])") >= 0) return rec.html;   // 本来就是新版，不用动
+    if(text.indexOf("Math.sqrt(AREA[i])") >= 0){
+      // 新结构（√公式）：只差 SKETCH_T 的值 —— 网页版旧版把兜底值写成了 0.15，
+      // 那些页面运行时会走「固定占比」分支，这里改成 0 即可，不动别的内容
+      if(text.indexOf("SKETCH_T=0.15") < 0) return rec.html;
+      return new Blob([text.replace("SKETCH_T=0.15", "SKETCH_T=0")], { type: "text/html" });
+    }
     if(text.indexOf(AXIS_OLD) < 0) return rec.html;                // 不是这类页面，原样返回
     const fixed = text.replace(AXIS_OLD, AXIS_NEW).replace(/SKETCH_T=[0-9.]+/, "SKETCH_T=0");
     return new Blob([fixed], { type: "text/html" });

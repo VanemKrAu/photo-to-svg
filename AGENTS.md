@@ -36,6 +36,10 @@
   `web/index.html` 里内嵌了 `AXIS_OLD` / `AXIS_NEW` 两段代码文本做替换，只改内存副本、
   不动 IndexedDB 里的原件。**改了 `tools/svg2canvas.py` 里的时间轴代码，就要同步改
   `web/index.html` 的 `AXIS_NEW`**，否则历史老记录升级后还是旧行为
+- **默认参数在 worker.js 里还有一层兜底**：主线程现在不传 `outline`，
+  `worker.js` 的 `m.outline ?? 0` 兜底成 0（曾经写着 `?? 0.15`，导致网页版生成的
+  一直走「固定 15%」分支，而 `web_run.py` 的默认值被绕过——查了一圈才发现）。
+  **改这类默认值时，`worker.js`、`web_run.py` 两处一起看**
 
 ---
 
