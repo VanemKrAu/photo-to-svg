@@ -591,11 +591,52 @@
   const urlCache = new Map();   // id -> {svg, html} 的对象 URL，避免重复创建
   function urlsOf(rec){
     let u = urlCache.get(rec.id);
-    if(!u){
-      u = { svg: URL.createObjectURL(rec.svg), html: URL.createObjectURL(rec.html) };
-      urlCache.set(rec.id, u);
-    }
+    if(!u){ u = { svg: URL.createObjectURL(rec.svg), html: null }; urlCache.set(rec.id, u); }
     return u;
+  }
+
+  /* ---------- 历史记录里的「旧版回放页」升级 ----------
+   * 早期生成的页面把线稿反解成固定 15% 的播出时间（起稿要磨十几秒）；
+   * 新默认按「√bbox面积 ≈ 线长」自然播（3 秒出头）。
+   * 历史里存的 HTML 是生成那一刻的成品，这里在打开/下载时把时间轴换成新逻辑，
+   * 只改内存里的副本，不动 IndexedDB 里存的原件。
+   * 注意：AXIS_NEW 要和 tools/svg2canvas.py 模板里那段保持同步。 */
+  const AXIS_OLD =
+    "  for(i=NL;i<N;i++){ w=0.15+AREA[i]*0.002; W[i]=w; sumW+=w; }\n" +
+    "  var LW = SKETCH_T>0 ? (SKETCH_T*sumW)/((1-SKETCH_T)*NL) : 0.15;\n" +
+    "  for(i=0;i<NL;i++) W[i]=LW;";
+  const AXIS_NEW =
+    "  if(SKETCH_T>0){\n" +
+    "    /* 指定了起稿时长：色块先按视觉重量算好，线稿反解成固定占比 */\n" +
+    "    for(i=NL;i<N;i++){ w=0.15+AREA[i]*0.002; W[i]=w; sumW+=w; }\n" +
+    "    var LW=(SKETCH_T*sumW)/((1-SKETCH_T)*NL);\n" +
+    "    for(i=0;i<NL;i++) W[i]=LW;\n" +
+    "  }else{\n" +
+    "    /* 默认：线稿不单独占时间，但用「线的长度」而不是「bbox 面积」来估它的视觉重量——\n" +
+    "       线是细长的，bbox 会把整条线的跨度都圈进去、明显超重（实测能把起稿拖到 13 秒）。\n" +
+    "       √bbox面积 ≈ 线的特征长度，和色块那边的「面积」在几何上对齐。 */\n" +
+    "    for(i=0;i<NL;i++) W[i]=0.15+Math.sqrt(AREA[i])*0.05;\n" +
+    "    for(i=NL;i<N;i++) W[i]=0.15+AREA[i]*0.002;\n" +
+    "  }";
+
+  async function upgradeAxis(rec){
+    if(rec._axisDone) return rec.html;      // 本次会话里已经处理过
+    let text;
+    try{ text = await rec.html.text(); }catch(_){ return rec.html; }
+    rec._axisDone = true;
+    if(text.indexOf("Math.sqrt(AREA[i])") >= 0) return rec.html;   // 本来就是新版，不用动
+    if(text.indexOf(AXIS_OLD) < 0) return rec.html;                // 不是这类页面，原样返回
+    const fixed = text.replace(AXIS_OLD, AXIS_NEW).replace(/SKETCH_T=[0-9.]+/, "SKETCH_T=0");
+    return new Blob([fixed], { type: "text/html" });
+  }
+
+  /* 升级后的 HTML 对象 URL（按记录缓存，避免重复处理十几 MB 文本） */
+  async function htmlUrlOf(rec){
+    const u = urlsOf(rec);
+    if(u.html) return u.html;
+    const blob = await upgradeAxis(rec);
+    u.html = URL.createObjectURL(blob);
+    return u.html;
   }
 
   async function renderHistory(){
@@ -643,10 +684,10 @@
         if(title) b.title = title;
         b.onclick = fn; acts.appendChild(b); return b;
       };
-      mk('▶ 预览', 'p', () => {
-        const u = urlsOf(r);
+      mk('▶ 预览', 'p', async () => {
+        const url = await htmlUrlOf(r);      // 旧记录会先升级时间轴（见 upgradeAxis）
         const a = document.createElement('a');
-        a.href = u.html; a.target = '_blank'; a.rel = 'noopener';
+        a.href = url; a.target = '_blank'; a.rel = 'noopener';
         document.body.appendChild(a); a.click(); a.remove();
       }, '在新标签页打开回放页');
       mk('⬇ SVG', '', () => {
@@ -654,15 +695,20 @@
         a.href = urlsOf(r).svg; a.download = (r.name || 'artwork') + '.svg';
         document.body.appendChild(a); a.click(); a.remove();
       });
-      mk('⬇ HTML', '', () => {
+      mk('⬇ HTML', '', async () => {
+        const url = await htmlUrlOf(r);      // 下载的也是升级后的版本
         const a = document.createElement('a');
-        a.href = urlsOf(r).html; a.download = (r.name || 'artwork') + '.html';
+        a.href = url; a.download = (r.name || 'artwork') + '.html';
         document.body.appendChild(a); a.click(); a.remove();
       });
       mk('删除', 'del', async () => {
         await dbDel(r.id);
         const u = urlCache.get(r.id);
-        if(u){ URL.revokeObjectURL(u.svg); URL.revokeObjectURL(u.html); urlCache.delete(r.id); }
+        if(u){
+          URL.revokeObjectURL(u.svg);
+          if(u.html) URL.revokeObjectURL(u.html);
+          urlCache.delete(r.id);
+        }
         renderHistory();
       });
       el.appendChild(acts);
@@ -693,7 +739,10 @@
     if(!confirm(
       `清空全部 ${list.length} 项生成历史，释放约 ${fmtSize(bytes)}？\n\n` +
       `此操作不可撤销。已经下载到本地的文件不受影响。`)) return;
-    for(const u of urlCache.values()){ URL.revokeObjectURL(u.svg); URL.revokeObjectURL(u.html); }
+    for(const u of urlCache.values()){
+      URL.revokeObjectURL(u.svg);
+      if(u.html) URL.revokeObjectURL(u.html);
+    }
     urlCache.clear();
     await wrap(tx('readwrite').clear());
     renderHistory();

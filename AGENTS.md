@@ -32,6 +32,10 @@
 - 改过界面后更新 README 那张截图：`python3 tools/shot_web.py`（需要 playwright）。
   它把界面设成「已选好图、等待生成」的状态再截整页，默认输出覆盖 `examples/screenshot-web-pc.png`。
   **更新截图时换个文件名**（如 `-pc2`），否则 GitHub 和浏览器会缓存旧图，用户看到的还是老的
+- 「生成历史」里早期存的回放页（线稿固定 15% 时间那版）会在**打开/下载时自动升级**：
+  `web/index.html` 里内嵌了 `AXIS_OLD` / `AXIS_NEW` 两段代码文本做替换，只改内存副本、
+  不动 IndexedDB 里的原件。**改了 `tools/svg2canvas.py` 里的时间轴代码，就要同步改
+  `web/index.html` 的 `AXIS_NEW`**，否则历史老记录升级后还是旧行为
 
 ---
 
