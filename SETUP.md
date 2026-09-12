@@ -98,7 +98,7 @@ $PY tools/smoke_test.py --render
 也可以自备一张照片跑完整流程：
 
 ```bash
-$PY tools/make_art.py 你的照片.jpg 测试 "测试" 60 0.15 0.25 2.6
+$PY tools/make_art.py 你的照片.jpg 测试 "测试" 60 0 0.25 2.6
 ```
 
 正常的话会看到：
@@ -155,7 +155,7 @@ export SVG_ART_OUT=/你的/目录
 **Q：手机上太卡**
 ```bash
 # 减少细节：跳过邻接合并 + 丢弃 6px 以下的碎片
-$PY tools/make_art.py 照片.jpg 作品名 "标题" 90 0.15 0.5
+$PY tools/make_art.py 照片.jpg 作品名 "标题" 90 0 0.5
 ```
 
 **Q：内存不够（<4 GB）**

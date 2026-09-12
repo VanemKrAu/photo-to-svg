@@ -477,8 +477,9 @@ function clearAll(){ ctx.fillStyle="#f0f0f0"; ctx.fillRect(0,0,W,H); }
 var cur=0, playing=false, speed=1, raf=null, last=0;
 var DURATION=__DUR__;  // 1× 总时长（秒）
 /* ---- 按「视觉重量」分配时间 ----
-   色块的时间 ∝ bbox 面积：大色块慢慢铺开，小碎片快过。
-   线稿笔权重由 SKETCH_T 反解，保证起稿阶段占满指定比例的时间。   */
+   每一笔的时间 ∝ bbox 面积：大笔慢慢铺开，小碎片快过。
+   线稿层默认和色块走同一条规则（不单独占时间）；
+   只有显式指定 SKETCH_T > 0 时，才把线稿反解成固定占比的起稿阶段。   */
 var SKETCH_P=__SP__, SKETCH_T=__ST__;
 var LINEW=__LINEW__;                 /* 线稿线宽（画布原生像素） */
 var NL=Math.max(1,Math.round(SKETCH_P*N));
@@ -488,9 +489,15 @@ var CUM=new Float64Array(N+1), TOTW=1;
 (function(){
   var i, w, acc=0, sumW=0, W=new Float64Array(N);
   if(!AREA){ for(i=0;i<N;i++) CUM[i+1]=i+1; TOTW=N; return; }
-  for(i=NL;i<N;i++){ w=0.15+AREA[i]*0.002; W[i]=w; sumW+=w; }
-  var LW = SKETCH_T>0 ? (SKETCH_T*sumW)/((1-SKETCH_T)*NL) : 0.15;
-  for(i=0;i<NL;i++) W[i]=LW;
+  if(SKETCH_T>0){
+    /* 指定了起稿时长：色块先按视觉重量算好，线稿反解成固定占比 */
+    for(i=NL;i<N;i++){ w=0.15+AREA[i]*0.002; W[i]=w; sumW+=w; }
+    var LW=(SKETCH_T*sumW)/((1-SKETCH_T)*NL);
+    for(i=0;i<NL;i++) W[i]=LW;
+  }else{
+    /* 默认：线稿和色块一条规则，都按视觉重量，不额外留时间 */
+    for(i=0;i<N;i++) W[i]=0.15+AREA[i]*0.002;
+  }
   for(i=0;i<N;i++){ acc+=W[i]; CUM[i+1]=acc; }
   TOTW=acc||1;
 })();
@@ -778,11 +785,12 @@ def main():
   4  标题              页面顶部显示（默认「逐笔绘制回放（Canvas 版）」）
   5  秒数              1× 速度下播完整幅画的时间（默认 80）
   6  线稿笔占比        必须填 0 —— 占位参数，实际笔数由脚本从 SVG 里读
-  7  线稿时间占比      起稿阶段吃掉多少播出时间（默认 0.22）
+  7  线稿时间占比      0 = 不单独控制（默认）——线稿跟色块一起按视觉重量播，
+                      自然占 3~7% 时间；给个 0~1 的小数则固定起稿阶段占比
   8  线宽              线稿线条宽度（画布原生像素，默认 2.6）
 
 例：
-  python3 svg2canvas.py 作品.svg 原图.jpg 作品.html "作品 · 逐笔绘制回放" 90 0 0.15 2.6
+  python3 svg2canvas.py 作品.svg 原图.jpg 作品.html "作品 · 逐笔绘制回放" 90 0 0 2.6
 """)
         return
     if len(sys.argv) < 6:
@@ -792,7 +800,7 @@ def main():
     duration = float(sys.argv[5]) if len(sys.argv) > 5 else 80.0
     sp = float(sys.argv[6]) if len(sys.argv) > 6 else 0.0    # 0 = 按实际线稿笔数自动算
     linew = float(sys.argv[8]) if len(sys.argv) > 8 else 2.6  # 线稿线宽
-    st = float(sys.argv[7]) if len(sys.argv) > 7 else 0.28   # 线稿阶段时间占比
+    st = float(sys.argv[7]) if len(sys.argv) > 7 else 0.0    # 线稿阶段时间占比；0 = 不单独控制（跟色块一起按视觉重量）
     print("解析 SVG…")
     d = parse_svg(src)
     print("  画布 %d×%d   顶点精度 1/%d px" % (d['w'], d['h'], d.get('scale', 10)))
@@ -841,8 +849,9 @@ def main():
             .replace("__LINEW__", str(linew)))
     open(out, "w", encoding="utf-8").write(html)
     real_sp = sp if sp > 0 else (nline / max(1, d['n']))
-    print("写出 %s  %.2f MB  (线稿 %d 笔 = %.1f%% 笔 / %.0f%% 时间)" % (
-        out, os.path.getsize(out) / 1e6, nline, real_sp * 100, st * 100))
+    stxt = ("%.0f%% 时间" % (st * 100)) if st > 0 else "按视觉重量自然分配"
+    print("写出 %s  %.2f MB  (线稿 %d 笔 = %.1f%% 笔 / %s)" % (
+        out, os.path.getsize(out) / 1e6, nline, real_sp * 100, stxt))
 
 
 if __name__ == "__main__":

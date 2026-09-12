@@ -1,36 +1,3 @@
-def pick_background(photo):
-    """选底色。
-
-    底色的作用是「哪些颜色可以整簇跳过不画」。选错的后果很严重：
-      * 选到画面里存在的颜色   -> 那片区域被挖空，露出底色（在深色区就是白点）
-      * 选到画面里不存在的颜色 -> 安全，底板只在缝隙里露一点点
-
-    所以策略是：高频色必须**明显**高频（>12%）才敢用；否则一律用画面里没有的中性色。
-    实测反例：一张海边照最高频色 #686868 占 5.94%，恰好越过旧的 5% 阈值，
-    而 #686868 正是画面里的阴影灰 -> 人物和沙滩的阴影被整簇挖掉，满图白点。
-    """
-    im = np.array(Image.open(photo).convert("RGB"))
-    flat = im.reshape(-1, 3)
-    q = flat // 8 * 8
-    cols, cnt = np.unique(q, axis=0, return_counts=True)
-    top = int(np.argmax(cnt))
-    bg = cols[top]
-    ratio = cnt[top] / len(flat)
-    lum = 0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2]
-
-    mean_lum = float(0.2126 * flat[:, 0].mean() + 0.7152 * flat[:, 1].mean()
-                     + 0.0722 * flat[:, 2].mean())
-    neutral = "#f0f0f0" if mean_lum >= 96 else "#101010"
-
-    if ratio >= 0.12:
-        hexbg = "#%02x%02x%02x" % tuple(int(v) for v in bg)
-        return hexbg, (14 if lum < 60 else 0), ratio
-
-    if ratio >= 0.05:
-        pass      # 旧阈值下会误用画面里的颜色，这里降级为中性色（见上面的反例）
-    return neutral, 0, ratio
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -48,7 +15,8 @@ make_art.py —— 一条命令跑完「照片 → 描摹 SVG → Canvas 逐笔�
                             [--preprocess=none|auto|illust]
 
   秒数          1× 速度下播完整幅画的时间，默认 90
-  线稿时间占比  起稿阶段吃掉多少播出时间，默认 0.15
+  线稿时间占比  默认 0 —— 不单独控制，线稿跟色块一起按视觉重量播（自然占 3~7% 时间）；
+                想固定起稿阶段时长才填 0~1 的小数（如 0.15）
   epsilon       轮廓简化容差，只影响顶点数不影响形状数，默认 0.25
   线宽          线稿线条宽度（画布原生像素），默认 2.6
 
@@ -57,8 +25,8 @@ make_art.py —— 一条命令跑完「照片 → 描摹 SVG → Canvas 逐笔�
   --preprocess=none     原样描摹（默认）
 
 例：
-  python3 tools/make_art.py 照片.jpg 海边人像 "海边人像 · 逐笔绘制回放" 90 0.15 0.25 2.6
-  python3 tools/make_art.py 插画.png 浴室少女 "浴室少女" 90 0.15 0.25 2.2 --preprocess=illust
+  python3 tools/make_art.py 照片.jpg 海边人像 "海边人像 · 逐笔绘制回放" 90 0 0.25 2.6
+  python3 tools/make_art.py 插画.png 浴室少女 "浴室少女" 90 0 0.25 2.2 --preprocess=illust
 """
 import os
 import re
@@ -106,33 +74,36 @@ def preprocess(photo, mode, workdir):
 
 
 def pick_background(photo):
-    """选底色。这个值会决定「哪些颜色整簇被跳过」，选错会让一片区域直接消失。
+    """选底色。
 
-    * 照片（有统一背景，如天空/沙滩）：底色 = 最高频色，占比通常 >5%，安全。
-    * 插画（没有统一背景）：最高频色可能只占 1%，用它作底会挖掉画面内容。
-      实测某插画：底取高频色 → SSIM 0.9060；换用画面中不存在的浅色 → 0.9276。
-      所以占比过低时改用「画面中不存在的中性色」，靠同色描边把缝隙填住。
+    底色的作用是「哪些颜色可以整簇跳过不画」。选错的后果很严重：
+      * 选到画面里存在的颜色   -> 那片区域被挖空，露出底色（在深色区就是白点）
+      * 选到画面里不存在的颜色 -> 安全，底板只在缝隙里露一点点
+
+    所以策略是：高频色必须**明显**高频（>12%）才敢用；否则一律用画面里没有的中性色。
+    实测反例：一张海边照最高频色 #686868 占 5.94%，恰好越过旧的 5% 阈值，
+    而 #686868 正是画面里的阴影灰 -> 人物和沙滩的阴影被整簇挖掉，满图白点。
     """
     im = np.array(Image.open(photo).convert("RGB"))
     flat = im.reshape(-1, 3)
-    q = (flat // 8 * 8)
+    q = flat // 8 * 8
     cols, cnt = np.unique(q, axis=0, return_counts=True)
     top = int(np.argmax(cnt))
     bg = cols[top]
     ratio = cnt[top] / len(flat)
     lum = 0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2]
 
-    if ratio >= 0.05:                       # 有统一背景，照常用
-        hexbg = "#%02x%02x%02x" % tuple(int(v) for v in bg)
-        return hexbg, (14 if lum < 60 else 0), int(im.shape[1]), int(im.shape[0])
-
-    # 没有统一背景：选一个与画面最不接近的中性色
     mean_lum = float(0.2126 * flat[:, 0].mean() + 0.7152 * flat[:, 1].mean()
                      + 0.0722 * flat[:, 2].mean())
-    cand = "#f0f0f0" if mean_lum >= 96 else "#101010"
-    print("底色：最高频色只占 %.1f%%（无统一背景）→ 改用 %s 作底，避免挖掉画面内容"
-          % (ratio * 100, cand))
-    return cand, 0, int(im.shape[1]), int(im.shape[0])
+    neutral = "#f0f0f0" if mean_lum >= 96 else "#101010"
+
+    if ratio >= 0.12:
+        hexbg = "#%02x%02x%02x" % tuple(int(v) for v in bg)
+        return hexbg, (14 if lum < 60 else 0), ratio
+
+    if ratio >= 0.05:
+        pass      # 旧阈值下会误用画面里的颜色，这里降级为中性色（见上面的反例）
+    return neutral, 0, ratio
 
 
 def run(cmd, **kw):
@@ -183,7 +154,7 @@ def main():
     name = argv[1]
     title = argv[2] if len(argv) > 2 else (name + " · 逐笔绘制回放")
     dur = argv[3] if len(argv) > 3 else "90"
-    outl = argv[4] if len(argv) > 4 else "0.15"
+    outl = argv[4] if len(argv) > 4 else "0"      # 0 = 线稿不单独占时间（按视觉重量播）
     eps = argv[5] if len(argv) > 5 else "0.25"
     linew = argv[6] if len(argv) > 6 else "2.6"
 

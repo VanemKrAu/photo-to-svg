@@ -61,12 +61,25 @@ def check_syntax():
                    glob.glob(os.path.join(ROOT, "skill", "scripts", "css_art", "*.py")))
     n = 0
     for f in files:
+        rel = os.path.relpath(f, ROOT)
         try:
-            ast.parse(open(f, encoding="utf-8").read()); n += 1
+            tree = ast.parse(open(f, encoding="utf-8").read())
+            n += 1
         except SyntaxError as e:
-            bad("%s 语法错误：%s" % (os.path.relpath(f, ROOT), e))
-    if n == len(files):
-        ok("%d 个脚本语法正常" % n)
+            bad("%s 语法错误：%s" % (rel, e))
+            continue
+        # 顶层函数/类重复定义：语法合法，但后定义的会静默覆盖前面的。
+        # 曾因此让 make_art.py 里两份 pick_background 互相覆盖、命令行直接跑不了（踩坑 #16）。
+        seen = {}
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                seen.setdefault(node.name, []).append(node.lineno)
+        for name, lines in seen.items():
+            if len(lines) > 1:
+                bad("%s 里 %s() 定义了 %d 次（行 %s）—— 后一份会覆盖前面的"
+                    % (rel, name, len(lines), "、".join(map(str, lines))))
+    if n == len(files) and not FAIL:
+        ok("%d 个脚本语法正常（含重复定义检查）" % n)
 
 
 def check_no_drift():
@@ -254,7 +267,7 @@ def check_render():
     with tempfile.TemporaryDirectory() as tmp:
         env = dict(os.environ, SVG_ART_OUT=tmp)
         r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "make_art.py"),
-                            src, "smoke", "SMOKE", "10", "0.15", "0.5", "2.6"],
+                            src, "smoke", "SMOKE", "10", "0", "0.5", "2.6"],
                            capture_output=True, text=True, env=env)
         if r.returncode != 0:
             bad("实跑失败：%s" % (r.stderr or r.stdout)[-300:]); return

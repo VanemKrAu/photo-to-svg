@@ -102,7 +102,7 @@ def pick_background(photo):
       * 选到画面里存在的颜色   → 那片区域被挖空，露出底色（在深色区就是白点）
       * 选到画面里不存在的颜色 → 安全，底板只在缝隙里露一点点
 
-    所以策略是：高频色必须**明显**高频（>5%）才敢用；否则一律用画面里没有的中性色。
+    所以策略是：高频色必须**明显**高频（>12%）才敢用；否则一律用画面里没有的中性色。
     实测反例：一张海边照最高频色 #686868 占 5.94%，恰好越过旧阈值，
     而 #686868 正是画面里的阴影灰 → 人物和沙滩的阴影被整簇挖掉，满图白点。
     """
@@ -159,7 +159,7 @@ def run(cfg_json, emit):
     name = cfg.get("name") or "artwork"
     title = cfg.get("title") or (name + " · 逐笔绘制回放")
     duration = str(cfg.get("duration", 90))
-    outline = str(cfg.get("outline", 0.15))
+    outline = str(cfg.get("outline", 0))           # 0 = 线稿不单独占时间（按视觉重量播）
     eps = str(cfg.get("epsilon", 0.25))
     linew = str(cfg.get("linewidth", 2.6))
     maxw = int(cfg.get("max_width", 0))            # 0 = 不限制
