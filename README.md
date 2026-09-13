@@ -1,5 +1,6 @@
 <h1 align="center">
   photo-to-svg
+  
   <br />
   <img src="assets/icon.png" width="72" alt="photo-to-svg logo" />
 </h1>
