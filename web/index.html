@@ -619,20 +619,225 @@
     "    for(i=NL;i<N;i++) W[i]=0.15+AREA[i]*0.002;\n" +
     "  }";
 
+  /* ---------- 历史里的旧回放页：布局升级（2026-09「相册式」缩放） ----------
+     旧版把视口做成了贴着图片的小框（放大只能在框里裁剪、缩放条压住画面）。
+     这套规则把它换成新布局：全部命中才应用，任何一处对不上就整体放弃
+     （页面保持原样，绝不会出现「半新半旧」）。规则来自 0f648ca 前后的模板对比，
+     含作品参数的几处（canvas 尺寸、W/H）用正则。 */
+  const LAYOUT_RULES = [
+    { re: /  \/\* 首帧兜底尺寸[\s\S]{0,400}?touch-action:none\}/,
+      to: `  /* .frame 是「视口」：撑满整个可用区域，图片按适配尺寸居中显示。
+     不要给它 aspect-ratio —— 那样它会缩成「贴着图片的小框」，
+     放大后只能在小框里裁剪，用不上整屏（手机全屏时尤其明显）。
+     放大时图片在视口里平移，超出部分正好被这里的 overflow 裁掉。 */
+  .frame{position:relative;flex:1 1 auto;min-width:0;align-self:stretch;overflow:hidden;touch-action:none}
+  /* 跟随缩放/平移的「画面」容器：canvas 和对照层都放里面，一次 transform 全部同步 */
+  .view{position:absolute;left:0;top:0;will-change:transform}` },
+    { from: `  /* 缩放控件：浮在画框右下角 */
+  .zoombar{position:absolute;right:10px;bottom:10px;display:flex;gap:3px;z-index:5;
+    background:rgba(10,10,16,.74);border:1px solid var(--line);border-radius:9px;
+    padding:4px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}`,
+      to: `  /* 缩放控件：放在底部控制栏里、按钮行的上一行。
+     原来是浮在画面右下角，放大后正好压住图，手机上很碍事。 */
+  .zoombar{display:flex;gap:3px;align-items:center;justify-content:center;
+    flex:1 1 auto;min-width:0}` },
+    { re: /(    )<canvas id="art" width="(\d+)" height="(\d+)"><\/canvas>\n(    )<div id="ghost"><\/div>\n(    )<div id="split"><\/div>/,
+      to: `$1<div class="view" id="view">\n$1  <canvas id="art" width="$2" height="$3"></canvas>\n$1  <div id="ghost"></div>\n$1  <div id="split"></div>` },
+    { from: `    <div id="split"></div>\n    <div id="toast">`,
+      to: `    <div id="split"></div>\n    </div>\n    <div id="toast">` },
+    { from: `    <div class="zoombar" id="zoombar">
+      <button id="zOut" title="缩小（滚轮 / 双指捏合）">−</button>
+      <span class="lvl" id="zLvl">100%</span>
+      <button id="zIn" title="放大（滚轮 / 双指捏合）">＋</button>
+      <button id="zFit" title="适应窗口（按 0）">⤢</button>
+      <button id="zRst" title="实际大小（按 1）">1:1</button>
+    </div>
+  </div>
+  <div id="side"><div class="tag">原图</div></div>
+</div>
+
+<footer>
+  <div class="row">
+    <div class="bar" id="bar">
+      <div class="track"></div><div class="fill" id="fill"></div><div class="knob" id="knob"></div>
+    </div>
+    <span class="meta" id="pct">0%</span>
+  </div>`,
+      to: `  </div>
+  <div id="side"><div class="tag">原图</div></div>
+</div>
+
+<footer>
+  <div class="row">
+    <div class="bar" id="bar">
+      <div class="track"></div><div class="fill" id="fill"></div><div class="knob" id="knob"></div>
+    </div>
+    <span class="meta" id="pct">0%</span>
+  </div>
+  <div class="row">
+    <div class="zoombar" id="zoombar">
+      <button id="zOut" title="缩小（滚轮 / 双指捏合）">−</button>
+      <span class="lvl" id="zLvl">100%</span>
+      <button id="zIn" title="放大（滚轮 / 双指捏合）">＋</button>
+      <button id="zFit" title="适应窗口（按 0）">⤢</button>
+      <button id="zRst" title="实际大小（按 1）">1:1</button>
+    </div>
+  </div>` },
+    { re: /(var CV=document\.getElementById\("art"\), W=\d+, H=\d+;\n)/,
+      to: `$1var fitW=0, fitH=0;                     /* 图片的「适配尺寸」：显示在视口中央的基准大小 */\n` },
+    { from: `var frame=document.getElementById("frame");\nfunction setSplit(clientX){\n  var r=frame.getBoundingClientRect();`,
+      to: `var frame=document.getElementById("frame"), VIEW=document.getElementById("view");\nfunction setSplit(clientX){\n  var r=VIEW.getBoundingClientRect();          /* 分界按「画面」（不是视口）的比例算 */` },
+    { from: `document.getElementById("full").addEventListener("click",toggleFull);\nframe.addEventListener("dblclick",toggleFull);`,
+      to: `document.getElementById("full").addEventListener("click",toggleFull);\n/* 双击留给「放大/还原」（绑在 frame 上，黑边区域双击也有效）；全屏只用按钮或 F 键 */` },
+    { from: `  else if(e.key==="1"){ e.preventDefault(); pause(); setZoom(1/fitScale); }\n  else if(e.key==="+"||e.key==="="){ e.preventDefault(); pause(); setZoom(zoom.s*1.4); }\n  else if(e.key==="-"||e.key==="_"){ e.preventDefault(); pause(); setZoom(zoom.s/1.4); }`,
+      to: `  else if(e.key==="1"){ e.preventDefault(); pause(); setZoomAt(1/fitScale); }\n  else if(e.key==="+"||e.key==="="){ e.preventDefault(); pause(); setZoomAt(zoom.s*1.4); }\n  else if(e.key==="-"||e.key==="_"){ e.preventDefault(); pause(); setZoomAt(zoom.s/1.4); }` },
+    { from: `  var dual=sideMode(), GAP=14;
+  if(dual){
+    sideEl.style.display="block";
+    var cell=(aw-GAP)/2;
+    var s=Math.min(cell/W, ah/H);
+    var w=Math.max(1,Math.floor(W*s)), h=Math.max(1,Math.floor(H*s));
+    frame.style.width=w+"px";  frame.style.height=h+"px";
+    sideEl.style.width=w+"px"; sideEl.style.height=h+"px";
+    fitScale = w / W;                       /* 1:1 按钮与快捷键要用它换算 */
+    if(zoom.s <= 1.0001) applyView();
+  }else{
+    sideEl.style.display="none";
+    var s2=Math.min(aw/W, ah/H);
+    frame.style.width =Math.max(1,Math.floor(W*s2))+"px";
+    frame.style.height=Math.max(1,Math.floor(H*s2))+"px";
+    fitScale = s2;
+    if(zoom.s <= 1.0001) applyView();
+  }`,
+      to: `  var dual=sideMode(), GAP=14, vw;
+  if(dual){
+    sideEl.style.display="block";
+    vw=(aw-GAP)/2;                          /* 左栏（视口）可用宽度 */
+  }else{
+    sideEl.style.display="none";
+    vw=aw;
+  }
+  /* 视口尺寸由 CSS 撑满，这里只算「图片的适配尺寸」并把它居中 */
+  var s=Math.min(vw/W, ah/H);
+  fitScale=s;                               /* 1:1 按钮与快捷键要用它换算 */
+  fitW=Math.max(1,Math.round(W*s)); fitH=Math.max(1,Math.round(H*s));
+  VIEW.style.width =fitW+"px";
+  VIEW.style.height=fitH+"px";
+  if(dual){ sideEl.style.width=fitW+"px"; sideEl.style.height=fitH+"px"; }
+  clampPan();
+  applyView();` },
+    { from: `  CV.style.transformOrigin = "0 0";
+  CV.style.transform = "translate(" + zoom.tx + "px," + zoom.ty + "px) scale(" + zoom.s + ")";`,
+      to: `  var fw=frame.clientWidth, fh=frame.clientHeight;
+  /* 图片视觉左上角 = 「居中基准」+ 用户平移（tx/ty 是相对居中位置的偏移） */
+  var bx=(fw-fitW*zoom.s)/2+zoom.tx, by=(fh-fitH*zoom.s)/2+zoom.ty;
+  VIEW.style.transformOrigin = "0 0";
+  VIEW.style.transform = "translate(" + bx + "px," + by + "px) scale(" + zoom.s + ")";` },
+    { from: `function clampPan(){
+  var maxX = Math.max(0, W * zoom.s - W), maxY = Math.max(0, H * zoom.s - H);
+  zoom.tx = Math.min(0, Math.max(-maxX, zoom.tx));
+  zoom.ty = Math.min(0, Math.max(-maxY, zoom.ty));
+}
+/* 以 (ax, ay) 为锚点缩放 —— 锚点是「相对画布左上角」的屏幕坐标。
+   推导：画布点 a 的屏幕位置 = tx + a*s；要让它缩放后位置不变，
+   则 tx' = p - (p - tx) * (s'/s)。 */
+function setZoom(ns, ax, ay){
+  ns = Math.min(24, Math.max(1, ns));
+  if(ax === undefined){ ax = W * zoom.s / 2; ay = H * zoom.s / 2; }
+  var k = ns / zoom.s;
+  zoom.tx = ax - (ax - zoom.tx) * k;
+  zoom.ty = ay - (ay - zoom.ty) * k;
+  zoom.s = ns;
+  clampPan();
+  applyView();
+}`,
+      to: `/* 平移范围：图片比视口大时不许把边缘拖进视口；没占满的方向锁在居中 */
+function clampPan(){
+  var fw=frame.clientWidth, fh=frame.clientHeight;
+  var vw=fitW*zoom.s, vh=fitH*zoom.s;
+  var mx=Math.max(0,(vw-fw)/2), my=Math.max(0,(vh-fh)/2);
+  zoom.tx = Math.max(-mx, Math.min(mx, zoom.tx));
+  zoom.ty = Math.max(-my, Math.min(my, zoom.ty));
+}
+/* 以视口内的点 (cx, cy) 为锚点缩放（不传就锚定视口中心）——
+   缩放后该点对应的屏幕位置保持不变，和相册/地图的手感一致。 */
+function setZoomAt(ns, cx, cy){
+  ns = Math.min(24, Math.max(1, ns));
+  var fw=frame.clientWidth, fh=frame.clientHeight;
+  var k = ns / zoom.s;
+  var L = (fw-fitW*zoom.s)/2+zoom.tx, T = (fh-fitH*zoom.s)/2+zoom.ty;   /* 图片视觉左上角 */
+  if(cx === undefined){ cx = fw/2; cy = fh/2; }
+  var a = cx - L, b = cy - T;                    /* 锚点相对图片左上角 */
+  zoom.s = ns;
+  zoom.tx = cx - a*k - (fw-fitW*ns)/2;
+  zoom.ty = cy - b*k - (fh-fitH*ns)/2;
+  clampPan();
+  applyView();
+}` },
+    { from: `  var r = CV.getBoundingClientRect();\n  setZoom(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX - r.left, e.clientY - r.top);`,
+      to: `  var r = frame.getBoundingClientRect();\n  setZoomAt(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX - r.left, e.clientY - r.top);` },
+    { from: `    var a = ptrs[ids[0]], b = ptrs[ids[1]];
+    pinch = { d: Math.hypot(a.x-b.x, a.y-b.y), s: zoom.s,
+              cx:(a.x+b.x)/2, cy:(a.y+b.y)/2 };`,
+      to: `    var a = ptrs[ids[0]], b = ptrs[ids[1]];
+    var r = frame.getBoundingClientRect();
+    pinch = { d: Math.hypot(a.x-b.x, a.y-b.y), s: zoom.s,
+              cx:(a.x+b.x)/2 - r.left, cy:(a.y+b.y)/2 - r.top };` },
+    { from: `    if(d > 0) setZoom(pinch.s * (d / pinch.d), pinch.cx, pinch.cy);`,
+      to: `    if(d > 0) setZoomAt(pinch.s * (d / pinch.d), pinch.cx, pinch.cy);` },
+    { from: `/* 双击画面：1× ⇄ 2.5× 切换（全屏改用按钮或 F 键） */
+CV.addEventListener("dblclick", function(e){
+  var r = CV.getBoundingClientRect();
+  if(zoom.s > 1.01) resetView();
+  else setZoom(2.5, e.clientX - r.left, e.clientY - r.top);
+});`,
+      to: `/* 双击画面：1× ⇄ 2.5× 切换（绑在视口上，黑边区域双击也有效） */
+frame.addEventListener("dblclick", function(e){
+  var r = frame.getBoundingClientRect();
+  if(zoom.s > 1.01) resetView();
+  else setZoomAt(2.5, e.clientX - r.left, e.clientY - r.top);
+});` },
+    { from: `document.getElementById("zIn").onclick  = function(){ pause(); setZoom(zoom.s * 1.4); };\ndocument.getElementById("zOut").onclick = function(){ pause(); setZoom(zoom.s / 1.4); };`,
+      to: `document.getElementById("zIn").onclick  = function(){ pause(); setZoomAt(zoom.s * 1.4); };\ndocument.getElementById("zOut").onclick = function(){ pause(); setZoomAt(zoom.s / 1.4); };` },
+    { from: `document.getElementById("zRst").onclick = function(){ pause(); setZoom(1 / fitScale); };`,
+      to: `document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fitScale); };` },
+  ];
+
+  function upgradeLayout(text){
+    let out = text;
+    for(const r of LAYOUT_RULES){
+      if(r.re){
+        if(!r.re.test(out)) return null;
+        out = out.replace(r.re, r.to);
+      }else{
+        if(out.split(r.from).length !== 2) return null;   // 必须恰好命中一处
+        out = out.replace(r.from, r.to);
+      }
+    }
+    return out;
+  }
+
   async function upgradeAxis(rec){
     if(rec._axisDone) return rec.html;      // 本次会话里已经处理过
     let text;
     try{ text = await rec.html.text(); }catch(_){ return rec.html; }
     rec._axisDone = true;
-    if(text.indexOf("Math.sqrt(AREA[i])") >= 0){
+    let out = text, changed = false;
+    /* ① 时间轴升级（2026-09-12）：线稿从「固定 15%」改成按视觉重量自然播 */
+    if(out.indexOf("Math.sqrt(AREA[i])") >= 0){
       // 新结构（√公式）：只差 SKETCH_T 的值 —— 网页版旧版把兜底值写成了 0.15，
-      // 那些页面运行时会走「固定占比」分支，这里改成 0 即可，不动别的内容
-      if(text.indexOf("SKETCH_T=0.15") < 0) return rec.html;
-      return new Blob([text.replace("SKETCH_T=0.15", "SKETCH_T=0")], { type: "text/html" });
+      // 那些页面运行时会走「固定占比」分支，这里改成 0 即可
+      if(out.indexOf("SKETCH_T=0.15") >= 0){
+        out = out.replace("SKETCH_T=0.15", "SKETCH_T=0"); changed = true;
+      }
+    }else if(out.indexOf(AXIS_OLD) >= 0){
+      out = out.replace(AXIS_OLD, AXIS_NEW).replace(/SKETCH_T=[0-9.]+/, "SKETCH_T=0");
+      changed = true;
     }
-    if(text.indexOf(AXIS_OLD) < 0) return rec.html;                // 不是这类页面，原样返回
-    const fixed = text.replace(AXIS_OLD, AXIS_NEW).replace(/SKETCH_T=[0-9.]+/, "SKETCH_T=0");
-    return new Blob([fixed], { type: "text/html" });
+    /* ② 布局升级（2026-09-14）：换成「相册式」缩放（全屏放大铺满整屏、缩放条在底部） */
+    const lx = upgradeLayout(out);
+    if(lx){ out = lx; changed = true; }
+    return changed ? new Blob([out], { type: "text/html" }) : rec.html;
   }
 
   /* 升级后的 HTML 对象 URL（按记录缓存，避免重复处理十几 MB 文本） */
