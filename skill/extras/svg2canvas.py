@@ -312,19 +312,8 @@ TEMPLATE = r'''<!DOCTYPE html>
     -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
   #split{position:absolute;top:0;bottom:0;left:50%;width:2px;background:#E5E5E5;
     opacity:.85;pointer-events:none;box-shadow:0 0 8px rgba(255,255,255,.35)}
-  /* 取景器装饰。都放在 .frame 内部 —— .frame 有 overflow:hidden，
-     往外放的角括号会被直接裁掉。全部 pointer-events:none，不影响操作。 */
-  .reticle{position:absolute;inset:0;pointer-events:none;opacity:.10;z-index:1}
-  .reticle .h{position:absolute;top:50%;left:0;right:0;height:1px;background:#fff}
-  .reticle .v{position:absolute;left:50%;top:0;bottom:0;width:1px;background:#fff}
-  .reticle .cross{position:absolute;top:50%;left:50%;width:20px;height:20px;transform:translate(-50%,-50%)}
-  .reticle .cross::before,.reticle .cross::after{content:"";position:absolute;background:rgba(255,255,255,.55)}
-  .reticle .cross::before{top:50%;left:0;right:0;height:1px}
-  .reticle .cross::after{left:50%;top:0;bottom:0;width:1px}
-  .reticle.grid{opacity:.055;background-image:
-    linear-gradient(rgba(255,255,255,.5) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(255,255,255,.5) 1px,transparent 1px);
-    background-size:33.333% 33.333%}
+  /* 取景器装饰只保留边缘的四角括号和角标。
+     原先还有一层网格 + 画面正中的十字准星，正好压在作品上挡着看，已移除。 */
   .corners{position:absolute;inset:0;pointer-events:none;z-index:2}
   .corners i{position:absolute;width:14px;height:14px;border:1.5px solid rgba(229,229,229,.85)}
   .corners i.tl{top:8px;left:8px;border-right:0;border-bottom:0}
@@ -449,12 +438,9 @@ TEMPLATE = r'''<!DOCTYPE html>
       <div id="ghost"></div>
       <div id="split"></div>
     </div>
-    <!-- 取景器装饰：网格 + 十字准星 + 四角括号 + DRAWING 角标。
-         全部 pointer-events:none，不挡任何操作。 -->
-    <div class="reticle grid" aria-hidden="true"></div>
-    <div class="reticle" aria-hidden="true">
-      <div class="h"></div><div class="v"></div><div class="cross"></div>
-    </div>
+    <!-- 取景器装饰：只留边缘的四角括号 + DRAWING 角标。
+         原先还有一层 3×3 网格和画面正中的十字准星，它们正好压在作品上挡着看，
+         已移除 —— 取景器感由边缘元素保留，不再往画面上画线。 -->
     <div class="corners" aria-hidden="true"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
     <div class="badge" aria-hidden="true"><i></i>DRAWING</div>
     <div id="toast">绘制中…</div>

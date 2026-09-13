@@ -243,19 +243,8 @@ section.stage{
 .vf .cn.bl{bottom:-1px;left:-1px;border-right:0;border-top:0}
 .vf .cn.br{bottom:-1px;right:-1px;border-left:0;border-top:0}
 
-/* 静态取景网格 + 中央十字 */
-.reticle{position:absolute;inset:0;pointer-events:none;opacity:.10;z-index:1}
-.reticle .h{position:absolute;top:50%;left:0;right:0;height:1px;background:#fff}
-.reticle .v{position:absolute;left:50%;top:0;bottom:0;width:1px;background:#fff}
-.reticle .cross{position:absolute;top:50%;left:50%;width:20px;height:20px;transform:translate(-50%,-50%)}
-.reticle .cross::before,.reticle .cross::after{content:"";position:absolute;background:rgba(255,255,255,.55)}
-.reticle .cross::before{top:50%;left:0;right:0;height:1px}
-.reticle .cross::after{left:50%;top:0;bottom:0;width:1px}
-.reticle.grid{
-  opacity:.05;
-  background-image:linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px);
-  background-size:40px 40px;background-position:center center;
-}
+/* （原先这里有一层 .reticle：画面正中的十字准星 + 3×3 网格。
+     它是纯装饰，却正好压在作品中央挡着看，已连同 HTML 一起移除。） */
 
 /* 画面 */
 .viewport{position:relative;z-index:2;display:flex;align-items:center;justify-content:center;width:100%;height:100%;overflow:hidden}
@@ -339,6 +328,11 @@ footer.hist{
   flex:0 0 auto;border-top:1px solid var(--hairline);background:var(--graphite);
   padding:10px 20px 12px;user-select:none;
 }
+/* 折叠态：只留标题行。历史区展开时占 ~190px，而舞台高度就是被它挤掉的 ——
+   生成完成后自动收起，预览框能立刻从 380 上下涨到 530 上下，不用点全屏也能看。 */
+footer.hist.collapsed .hlist,
+footer.hist.collapsed .credit{display:none}
+footer.hist.collapsed .hist-head{margin-bottom:0}
 .hist-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px}
 .hist-head .l{display:flex;align-items:baseline;gap:10px;min-width:0}
 .hist-head .t{font:400 10.5px var(--mono);color:var(--dim);letter-spacing:.06em}
@@ -588,7 +582,9 @@ footer.hist{
         <span class="cn tl"></span><span class="cn tr"></span>
         <span class="cn bl"></span><span class="cn br"></span>
 
-        <div class="reticle grid" id="reticle"><span class="cross"></span></div>
+        <!-- 这里原本有一层 .reticle（画面正中的十字准星 + 3×3 网格）。
+             它是纯装饰，却正好压在作品中央、挡住观看，已移除。
+             取景器感由边缘的四角括号 + HUD 保留，不再往画面上画线。 -->
 
         <!-- 空态 -->
         <div class="empty" id="emptyState">
@@ -657,6 +653,7 @@ footer.hist{
       <span class="q" id="hQuota"></span>
     </div>
     <div class="acts">
+      <button class="ghost" id="hToggle" aria-expanded="true" title="收起 / 展开生成历史（收起后预览区更高）">收起历史</button>
       <button class="ghost" id="hPrune" title="按体积上限清理最旧的记录">清理空间</button>
       <button class="ghost" id="hClear">全部清空</button>
     </div>
@@ -2707,6 +2704,12 @@ async function onDone(m){
   // 没写进库（配额不足等）就把它从 urlCache 摘掉：这条记录压根不在历史里，
   // 删除 / 清空都碰不到它，留着就是一份永远没人回收的 objectURL。
   if(!saved) dropUrls(recId);
+
+  /* 生成完了，用户要看的是作品：把历史区收起来。
+     历史区展开时固定占掉 ~190px，而舞台的高度就是被它挤没的 ——
+     收起后预览框立刻从 380 上下涨到 530 上下，不用点全屏也能正常看。
+     标题行还在，右上角「展开历史」一键还原。 */
+  setHistCollapsed(true);
 }
 
 /* ---------------- 开始生成 ---------------- */
@@ -2757,6 +2760,18 @@ $('clearCache').addEventListener('click', () => {
 
 /* IndexedDB 被禁用时 db 会保持 null，tx() 会抛 TypeError。这两个入口以前没有
    try/catch，点了毫无反应、也没有任何提示 —— 包起来给用户一个明确交代。 */
+/* 生成历史的收起 / 展开。收起后舞台变高、预览变大 —— 生成完成会自动收起一次。 */
+const histFoot = document.querySelector('footer.hist');
+function setHistCollapsed(on){
+  histFoot.classList.toggle('collapsed', on);
+  const b = $('hToggle');
+  b.textContent = on ? '展开历史' : '收起历史';
+  b.setAttribute('aria-expanded', String(!on));
+}
+$('hToggle').addEventListener('click', () => {
+  setHistCollapsed(!histFoot.classList.contains('collapsed'));
+});
+
 $('hPrune').addEventListener('click', async () => {
   let before;
   try{
