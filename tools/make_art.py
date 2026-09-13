@@ -99,7 +99,11 @@ def pick_background(photo):
 
     if ratio >= 0.12:
         hexbg = "#%02x%02x%02x" % tuple(int(v) for v in bg)
-        return hexbg, (14 if lum < 60 else 0), ratio
+        # dark_cut 统一给 0。曾经深色图给 14，实测那是「暗斑」的元凶：
+        # 与底色差 ≤14 的像素（皮肤阴影、水渍、暗部渐变）被整片涂成底色、
+        # 描摹时归入背景不画 —— 实测能压平 26% 的画面。取消后笔数约 +25%，
+        # 换来暗部完整（2026-09-14 用户实测报「治标不治本」后改）。
+        return hexbg, 0, ratio
 
     if ratio >= 0.05:
         pass      # 旧阈值下会误用画面里的颜色，这里降级为中性色（见上面的反例）

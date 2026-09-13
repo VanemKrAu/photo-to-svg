@@ -123,7 +123,9 @@ def pick_background(photo):
     neutral = "#f0f0f0" if mean_lum >= 96 else "#101010"
 
     if ratio >= 0.12:                       # 明确的高频背景（照片里的天空/幕布）
-        return "#%02x%02x%02x" % tuple(int(v) for v in bg), (14 if lum < 60 else 0), ratio
+        # dark_cut 统一给 0：曾经深色图给 14，实测会压平 26% 的画面（暗部变「黑斑」）。
+        # 详见 tools/make_art.py 里同段注释。
+        return "#%02x%02x%02x" % tuple(int(v) for v in bg), 0, ratio
 
     # 剩下的一律用中性色。多花的那点体积，换的是「绝不会挖空画面」。
     return neutral, 0, ratio
