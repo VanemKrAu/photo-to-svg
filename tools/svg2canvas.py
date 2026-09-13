@@ -257,6 +257,9 @@ TEMPLATE = r'''<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>__TITLE__</title>
+<!-- 图标内联成 data URI：回放页是独立文件，下载到哪儿、发给谁，都得自带图标
+     （不要换成外部 favicon.svg —— 那样一挪位置就没了）。# 要写成 %23。 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' width='512' height='512'%3E%3Cdefs%3E%3ClinearGradient id='b' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%231d1d33'/%3E%3Cstop offset='1' stop-color='%230a0a12'/%3E%3C/linearGradient%3E%3ClinearGradient id='k' x1='0' y1='1' x2='1' y2='0'%3E%3Cstop offset='0' stop-color='%239d7a16'/%3E%3Cstop offset='1' stop-color='%23f7e7ad'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='512' height='512' rx='114' fill='url(%23b)'/%3E%3Crect x='7' y='7' width='498' height='498' rx='107' fill='none' stroke='%2333335a' stroke-width='7'/%3E%3Cpath d='M118 392C196 322 300 218 390 142' fill='none' stroke='url(%23k)' stroke-width='48' stroke-linecap='round'/%3E%3Crect x='351' y='103' width='78' height='78' rx='14' fill='%230d0d16' stroke='%23f7e7ad' stroke-width='16'/%3E%3C/svg%3E">
 <style>
   :root{--bg:#07070a;--panel:#131320;--line:#282842;--gold:#c9a227;--text:#e9e9f2;--dim:#71718c;
     --ghostimg:url(__GHOST__)}

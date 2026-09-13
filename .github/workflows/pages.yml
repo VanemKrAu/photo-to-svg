@@ -31,6 +31,8 @@ jobs:
           rm -rf _site && mkdir -p _site/tools _site/scripts
           # 网站本体
           cp web/index.html web/worker.js web/web_run.py _site/
+          # 站点图标（浏览器标签页 / iOS 加到主屏）
+          cp web/favicon.svg web/favicon.ico web/apple-touch-icon.png _site/
           # 流水线脚本（与仓库里同一份，不复制一份改过的）
           cp tools/build_svg_art.py tools/svg2canvas.py _site/tools/
           # 上游 skill 的算法模块（build_svg_art 靠上溯父目录找 scripts/css_art）
@@ -47,7 +49,8 @@ jobs:
                    tools/svg2canvas.py scripts/css_art/regions.py \
                    scripts/css_art/geometry.py scripts/css_art/quality.py \
                    scripts/css_art/render.py scripts/css_art/audit.py \
-                   scripts/css_art/cli.py scripts/css_art/__init__.py; do
+                   scripts/css_art/cli.py scripts/css_art/__init__.py \
+                   favicon.svg favicon.ico apple-touch-icon.png; do
             if [ -f "_site/$f" ]; then echo "  OK  $f"; else echo "  缺  $f"; fail=1; fi
           done
           # 核对 worker.js 里列的文件清单与实际发布内容一致
