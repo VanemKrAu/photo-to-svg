@@ -368,6 +368,17 @@ footer.hist{
 }
 .hitem .acts .a:hover{background:#2A2A30;color:var(--text)}
 .hitem .acts .a.del:hover{color:var(--err)}
+/* 批量选择：选中框取代三个操作按钮，点整张卡 = 切换选中。
+   由 body.sel-mode 统一切换，renderHistory() 重建卡片时按 selIds 复原勾选态。 */
+.hitem .ck{
+  display:none;position:absolute;top:6px;right:6px;width:16px;height:16px;z-index:2;
+  border:1px solid #55555E;background:rgba(0,0,0,.6);border-radius:2px;
+  place-items:center;font:600 10px var(--mono);color:transparent;
+}
+body.sel-mode .hitem .ck{display:grid}
+body.sel-mode .hitem .acts{display:none}
+.hitem.sel{border-color:#EDEDED;background:#1C1C22}
+.hitem.sel .ck{border-color:#EDEDED;background:#EDEDED;color:#0B0B0D}
 .hist-empty{font:400 11px var(--mono);color:var(--dim);padding:20px 0;text-align:center;width:100%}
 /* 上游署名（MIT 许可要求保留） */
 .credit{margin-top:9px;padding-top:8px;border-top:1px solid var(--hairline);
@@ -638,7 +649,8 @@ footer.hist{
       <span class="q" id="hQuota"></span>
     </div>
     <div class="acts">
-      <button class="ghost" id="hPrune" title="按体积上限清理最旧的记录">清理空间</button>
+      <button class="ghost" id="hSelect" title="进入多选，勾选后批量删除">多选</button>
+      <button class="ghost" id="hBulk" style="display:none" title="删除勾选的记录">删除选中 (0)</button>
       <button class="ghost" id="hClear">全部清空</button>
     </div>
   </div>
@@ -1806,8 +1818,43 @@ if(window.ResizeObserver){
 }
 
 /* ---------------- 渲染历史 ---------------- */
+/* ---------------- 批量选择 ----------------
+   原先是「清理空间」按钮：按「最多 N 项 / M 字节」的规则替用户决定删哪几条。
+   那等于让程序判断哪些作品还值得留 —— 用户明确不要，改成自己勾、批量删。
+   勾选态记在 selIds（不依赖 DOM）：renderHistory() 每次重建卡片都按它复原。 */
+let selMode = false;
+const selIds = new Set();
+function selCount(){ return selIds.size; }
+function syncSelUI(){
+  document.body.classList.toggle('sel-mode', selMode);
+  const b = $('hSelect'), bulk = $('hBulk');
+  if(b){ b.textContent = selMode ? '取消' : '多选'; b.classList.toggle('on', selMode); }
+  if(bulk){
+    bulk.style.display = selMode ? '' : 'none';
+    bulk.textContent = '删除选中 (' + selCount() + ')';
+    bulk.disabled = selCount() === 0;
+  }
+}
+function toggleSel(id){
+  if(selIds.has(id)) selIds.delete(id); else selIds.add(id);
+  const el = document.querySelector('.hitem[data-id="' + id + '"]');
+  if(el) el.classList.toggle('sel', selIds.has(id));   // 只改这一张，不重建整列
+  syncSelUI();
+}
+function exitSel(clear){
+  selMode = false;
+  if(clear) selIds.clear();
+  syncSelUI();
+  renderHistory();
+}
+
 async function renderHistory(){
   const list = await dbAll();
+  /* 库里可能已经被单条删除 / 清空改过：把不存在的 id 从勾选集合里剔掉，
+     否则会出现「删除选中 (3)」但列表只剩 2 条这种对不上的状态。 */
+  const alive = new Set(list.map((r) => r.id));
+  [...selIds].forEach((id) => { if(!alive.has(id)) selIds.delete(id); });
+  syncSelUI();
   const box = $('hList');
   box.innerHTML = '';
   const bytes = list.reduce((n, r) => n + (r.size || 0), 0);
@@ -1825,13 +1872,15 @@ async function renderHistory(){
 
   for(const rec of list){
     const el = document.createElement('div');
-    el.className = 'hitem';
+    el.className = 'hitem' + (selIds.has(rec.id) ? ' sel' : '');
+    el.dataset.id = rec.id;
     el.setAttribute('role', 'button');
     el.tabIndex = 0;
     el.title = '点击预览：' + rec.title;
     // title 只算补充说明，不是可访问名：读屏会把卡片念成「…笔 ⬇SVG ⬇HTML ✕」
     el.setAttribute('aria-label', '打开历史记录：' + (rec.title || rec.name || '未命名'));
     el.innerHTML =
+      '<span class="ck" aria-hidden="true">✓</span>' +
       '<span class="row">' +
         '<span class="th">' + (rec.thumb ? '<img alt="" src="' + rec.thumb + '">'
                                           : '<span class="ph">▣</span>') + '</span>' +
@@ -1905,10 +1954,16 @@ async function renderHistory(){
     // 原来是 <button>，改成 div 后 Enter / 空格要自己接
     el.addEventListener('keydown', async (ev) => {
       if(ev.target !== el) return;                 // 焦点在内部按钮上时交给它们
-      if(ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); await loadIntoStage(); }
+      if(ev.key === 'Enter' || ev.key === ' '){
+        ev.preventDefault();
+        if(selMode) toggleSel(rec.id);
+        else await loadIntoStage();
+      }
     });
 
     el.addEventListener('click', async (ev) => {
+      // 多选模式：点整张卡就是勾选 / 取消勾选，不进预览、也不理内部按钮
+      if(selMode){ toggleSel(rec.id); return; }
       const act = ev.target.closest('[data-a]');
       if(act){
         ev.stopPropagation();
@@ -2608,32 +2663,29 @@ $('clearCache').addEventListener('click', () => {
 /* 生成历史始终展开。这里原本有 setHistCollapsed() 和「收起历史」按钮，
    以及生成完成后自动收起一次 —— 用户明确不要这个功能，已整套移除。 */
 
-$('hPrune').addEventListener('click', async () => {
-  let before;
-  try{
-    before = await dbAll();
-  }catch(e){
-    toast('清理失败：历史功能当前不可用', true);
-    return;
+/* 多选：进入 / 退出；「删除选中」把勾中的记录一次删掉。
+   prune() 仍然保留，但它只作为写入配额超限时的兜底，不再是用户可见的功能。 */
+$('hSelect').addEventListener('click', () => {
+  if(selMode) exitSel(true);
+  else { selMode = true; syncSelUI(); }
+});
+$('hBulk').addEventListener('click', async () => {
+  const ids = [...selIds];
+  if(!ids.length){ toast('还没有勾选任何记录'); return; }
+  if(!confirm('删除勾选的 ' + ids.length + ' 条记录？\n\n已下载到本地的文件不受影响。')) return;
+  let failed = 0;
+  for(const id of ids){
+    try{ await dbDel(id); }catch(e){ failed++; }
+    dropUrls(id);                        // 不回收的话，单条 5~30MB 会一直挂着
   }
-  if(!before.length){ toast('还没有生成记录'); return; }
-  const beforeBytes = before.reduce((n, r) => n + (r.size || 0), 0);
-  /* 这是能一次删掉最多 MAX_ITEMS 条记录的破坏性操作，必须先确认、并把规则和体量说清楚
-     （原版就是这样，之前的版本直接开删还只报「剩下几条」，用户不知道丢了什么）。 */
-  if(!confirm(
-    '当前 ' + before.length + ' 项，共 ' + fmtSize(beforeBytes) + '。\n\n' +
-    '将按「最多 ' + MAX_ITEMS + ' 项 / ' + fmtSize(MAX_BYTES) + '」的规则，' +
-    '删除最旧的记录直到符合上限。\n已下载到本地的文件不受影响。继续？')) return;
-  try{
-    const left = await prune();
-    await renderHistory();
-    const removed = before.length - left.length;
-    // 本来就在上限内时别说「已清理 0 项」，那看着像出错了
-    toast(removed ? ('已清理 ' + removed + ' 项，释放 ' + fmtSize(beforeBytes - left.reduce((n, r) => n + (r.size || 0), 0)))
-                  : '当前还不到上限，无需清理');
-  }catch(e){
-    toast('清理失败：历史功能当前不可用', true);
-  }
+  /* 删掉的里面如果有正在舞台上预览的那条，它的 objectURL 已经被 revoke，
+     三个下载链接会变成死链 —— 必须收回空态。 */
+  if(ids.includes(currentRecId)) showEmpty();
+  selIds.clear();
+  await renderHistory();
+  syncSelUI();
+  toast(failed ? ('已删除 ' + (ids.length - failed) + ' 条，' + failed + ' 条失败')
+                : ('已删除 ' + ids.length + ' 条记录'), !!failed);
 });
 $('hClear').addEventListener('click', async () => {
   let list;
@@ -2660,7 +2712,9 @@ $('hClear').addEventListener('click', async () => {
   [...urlCache.keys()].forEach(dropUrls);
   // 舞台上如果正摆着某条历史，它的 URL 刚被 revoke 掉了 —— 一起收回空态
   if(currentRecId) showEmpty();
+  selIds.clear();                       // 库都空了，勾选态没有意义
   await renderHistory();
+  syncSelUI();
   toast('历史已清空');
 });
 
