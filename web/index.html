@@ -253,6 +253,21 @@
   footer{padding:20px 20px 34px;color:var(--dim);font-size:12px;text-align:center;
     border-top:1px solid rgba(40,40,66,.7)}
   footer a{color:var(--gold);text-decoration:none}
+
+  /* 全屏预览层：blob 链接在「新标签页」里打不开（Android WebView / VIA 等
+     调用系统内核的浏览器会得到空白页），改成页面内全屏 iframe ——
+     同一文档访问 blob，所有浏览器都稳 */
+  #preview{position:fixed;inset:0;z-index:999;display:none;flex-direction:column;background:#060608}
+  #preview.on{display:flex}
+  .pv-bar{display:flex;align-items:center;gap:12px;padding:10px 14px;
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(20,20,34,.95),rgba(13,13,22,.75))}
+  .pv-title{flex:1 1 auto;min-width:0;font-size:13px;font-weight:600;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #pvClose{font:inherit;font-size:12.5px;color:#e8c97a;background:transparent;
+    border:1px solid #6b5416;border-radius:7px;padding:5px 12px;cursor:pointer;flex:0 0 auto;
+    -webkit-tap-highlight-color:transparent}
+  #pvFrame{flex:1 1 auto;width:100%;border:0;background:#000}
   @media (max-width:1059px){
     .grid > .col{display:contents}      /* 窄屏：左列/右列的包裹不产生额外层级，卡片直接堆叠 */
   }
@@ -383,7 +398,7 @@
       <div id="result">
         <a id="openHtml" class="openbtn" target="_blank" rel="noopener">
           <span class="ar">▶</span>
-          <span><b>在新标签页打开回放页</b><small>全屏播放绘制过程，可发给别人</small></span>
+          <span><b>全屏预览回放页</b><small>全屏播放绘制过程（下载后可以发给别人）</small></span>
         </a>
 
         <div class="files">
@@ -420,6 +435,17 @@
     </div><!-- /右列 -->
   </div>
 </main>
+
+<!-- 全屏预览层：blob 链接在「新标签页」里打不开（Android WebView / VIA 等
+     调用系统内核的浏览器会得到空白页），这里改成页面内全屏 iframe ——
+     同一文档访问 blob，所有浏览器都稳，桌面端也少开一个标签页 -->
+<div id="preview">
+  <div class="pv-bar">
+    <span class="pv-title" id="pvTitle">回放预览</span>
+    <button id="pvClose" type="button">✕ 关闭</button>
+  </div>
+  <iframe id="pvFrame" title="回放预览"></iframe>
+</div>
 
 <footer>
   <div class="wrap">
@@ -507,6 +533,31 @@
     logEl.appendChild(line);
     logEl.scrollTop = logEl.scrollHeight;
   }
+
+  /* ---------- 全屏预览层 ----------
+   * 为什么不用「新标签页」：blob URL 只在创建它的文档里有效 ——
+   * Android WebView（VIA 等调用系统内核的浏览器）打开新标签页会得到
+   * 空白页（Chrome 自带完整内核所以没事）。页面内 iframe 属于同一文档，
+   * blob 一定有效；桌面端也顺便少开一个标签页。 */
+  function openPreview(url, title){
+    $('pvTitle').textContent = title || '回放预览';
+    $('pvFrame').src = url;
+    $('preview').classList.add('on');
+  }
+  function closePreview(){
+    if(!$('preview').classList.contains('on')) return;
+    $('preview').classList.remove('on');
+    $('pvFrame').src = 'about:blank';     // 停掉回放，释放内存
+  }
+  $('pvClose').addEventListener('click', closePreview);
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') closePreview();
+  });
+  /* 结果卡的「预览」：拦掉默认的新标签页行为，改走页面内全屏 */
+  $('openHtml').addEventListener('click', function(e){
+    e.preventDefault();
+    openPreview(this.href, $('title').value || '回放预览');
+  });
 
   /* ---------- 历史（IndexedDB） ----------
    * 用 IndexedDB 而不是 localStorage：单条记录就有 5~30 MB，
@@ -900,11 +951,9 @@ frame.addEventListener("dblclick", function(e){
         b.onclick = fn; acts.appendChild(b); return b;
       };
       mk('▶ 预览', 'p', async () => {
-        const url = await htmlUrlOf(r);      // 旧记录会先升级时间轴（见 upgradeAxis）
-        const a = document.createElement('a');
-        a.href = url; a.target = '_blank'; a.rel = 'noopener';
-        document.body.appendChild(a); a.click(); a.remove();
-      }, '在新标签页打开回放页');
+        const url = await htmlUrlOf(r);      // 旧记录会先升级时间轴与布局（见 upgradeAxis）
+        openPreview(url, r.title || r.name); // 页面内全屏（新标签页在 WebView 里打不开 blob）
+      }, '全屏预览回放页');
       mk('⬇ SVG', '', () => {
         const a = document.createElement('a');
         a.href = urlsOf(r).svg; a.download = (r.name || 'artwork') + '.svg';
