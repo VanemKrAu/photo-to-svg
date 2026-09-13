@@ -262,7 +262,9 @@ TEMPLATE = r'''<!DOCTYPE html>
   .frame{position:relative;flex:1 1 auto;min-width:0;align-self:stretch;overflow:hidden;touch-action:none}
   /* 跟随缩放/平移的「画面」容器：canvas 和对照层都放里面，一次 transform 全部同步 */
   .view{position:absolute;left:0;top:0;will-change:transform}
-  canvas{display:block;width:100%;height:100%;background:#f0f0f0}
+  /* 底板色 = 生成时的底色（__BG__）。绝不能写死浅色 —— 深色图里「与底色
+     相近、被整簇跳过的深色块」会露出这层底板，浅色底板会让它满屏白斑 */
+  canvas{display:block;width:100%;height:100%;background:__BG__}
   #ghost{position:absolute;inset:0;background-image:var(--ghostimg);background-size:100% 100%;
     background-repeat:no-repeat;clip-path:inset(0 0 0 50%);pointer-events:none}
   /* 宽屏并排栏：只显示跟当前帧同步的原图块 */
@@ -493,7 +495,7 @@ function paintRange(from,to){
     ctx.fill("evenodd");
   }
 }
-function clearAll(){ ctx.fillStyle="#f0f0f0"; ctx.fillRect(0,0,W,H); }
+function clearAll(){ ctx.fillStyle="__BG__"; ctx.fillRect(0,0,W,H); }   /* 底板色必须与 SVG 里的一致 */
 
 var cur=0, playing=false, speed=1, raf=null, last=0;
 var DURATION=__DUR__;  // 1× 总时长（秒）
@@ -839,6 +841,13 @@ def main():
     st = float(sys.argv[7]) if len(sys.argv) > 7 else 0.0    # 线稿阶段时间占比；0 = 不单独控制（跟色块一起按视觉重量）
     print("解析 SVG…")
     d = parse_svg(src)
+    # 回放页的底板色必须和 SVG 里的底板一致：深色图里「与底色相近、被整簇
+    # 跳过的块」根本不画，露出来的就是这层底板 —— 两边不一致时（比如底板
+    # 写死浅色）深色图会满屏白斑（2026-09-14 用户报）。
+    with open(src, encoding="utf-8") as fh:
+        m_bg = re.search(r'<rect width="[\d.]+" height="[\d.]+" fill="(#[0-9a-fA-F]{6})"', fh.read())
+    bgcolor = m_bg.group(1) if m_bg else "#f0f0f0"
+    print("  底板色 %s（取自 SVG）" % bgcolor)
     print("  画布 %d×%d   顶点精度 1/%d px" % (d['w'], d['h'], d.get('scale', 10)))
     print("  色块笔 %d  环 %d  顶点 %d  渐变 %d" % (d['n'], d['nr'], d['nv'], d['ng']))
     if os.environ.get("NO_LINEART"):
@@ -882,7 +891,8 @@ def main():
             .replace("__DUR__", str(duration))
             .replace("__SP__", "%.4f" % (sp if sp > 0 else (nline / max(1, d['n']))))
             .replace("__ST__", str(st))
-            .replace("__LINEW__", str(linew)))
+            .replace("__LINEW__", str(linew))
+            .replace("__BG__", bgcolor))
     open(out, "w", encoding="utf-8").write(html)
     real_sp = sp if sp > 0 else (nline / max(1, d['n']))
     stxt = ("%.0f%% 时间" % (st * 100)) if st > 0 else "按视觉重量自然分配"
