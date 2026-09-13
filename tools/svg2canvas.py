@@ -419,10 +419,6 @@ TEMPLATE = r'''<!DOCTYPE html>
     header .k.hide-sm,header .sep.hide-sm{display:none}
     footer{padding:9px 12px calc(11px + env(safe-area-inset-bottom))}
     .sp button{padding:5px 9px}
-    /* 手机上一行放不下全部控制（320 宽时倍速三颗全被挤出视口）。
-       原来靠横向滑动兜底，但用户多半发现不了「这里能滑」——
-       改成换行，全部按钮一眼可见。 */
-    .row.scroll{flex-wrap:wrap;overflow-x:visible}
   }
   /* 只有真鼠标设备才给 hover 反馈，触屏不受影响 */
   @media (hover:hover) and (pointer:fine){
