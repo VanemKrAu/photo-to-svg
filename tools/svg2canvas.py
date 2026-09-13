@@ -277,6 +277,17 @@ TEMPLATE = r'''<!DOCTYPE html>
   footer{flex:0 0 auto;padding:8px 12px calc(10px + env(safe-area-inset-bottom));
     border-top:1px solid var(--line);background:linear-gradient(0deg,#141422,#0d0d16);
     display:flex;flex-direction:column;gap:8px}
+  /* 伪全屏（点「全屏」或按 F）：藏起页头/页脚，画面区占满整屏。
+     不用 Fullscreen API —— Android WebView（VIA 等）的宿主会把它当
+     「视频全屏」处理并强制横屏，竖图也被转；CSS 方案完全绕开它。 */
+  body.fs header, body.fs footer{display:none}
+  body.fs .stage{padding:0}
+  body.fs .zoombar{bottom:14px}
+  #fsExit{display:none;position:fixed;right:10px;top:10px;z-index:30;
+    font:inherit;font-size:12.5px;color:var(--text);background:rgba(10,10,16,.74);
+    border:1px solid var(--line);border-radius:9px;padding:7px 12px;cursor:pointer;
+    -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+  body.fs #fsExit{display:block}
   /* 控制栏：窄屏下必须能横滑，否则右侧的倍速按钮会被挤出屏幕点不到 */
   .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
   .row.scroll{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;
@@ -407,6 +418,7 @@ TEMPLATE = r'''<!DOCTYPE html>
     </div>
   </div>
 </footer>
+<button id="fsExit" type="button">✕ 退出全屏</button>
 
 <script id="payload" type="text/plain">__PAYLOAD__</script>
 <script>
@@ -617,16 +629,19 @@ frame.addEventListener("pointermove",function(e){
   if(e.pointerType==="mouse" || e.buttons) setSplit(e.clientX);
 });
 
-/* ---- 全屏 ---- */
+/* ---- 全屏：CSS 伪全屏（藏起页头/页脚，画面区占满）----
+   不用 Fullscreen API：Android WebView（VIA 等调用系统内核的浏览器）会把
+   requestFullscreen 交给宿主处理，宿主常按「视频全屏」对待并强制横屏 ——
+   竖图也会被转成横屏。CSS 方案不碰系统接口，所有浏览器行为一致，
+   嵌在 iframe 里也能用（不需要 allowfullscreen）。 */
 function toggleFull(){
-  var d=document, el=d.documentElement;
-  if(d.fullscreenElement||d.webkitFullscreenElement){
-    (d.exitFullscreen||d.webkitExitFullscreen).call(d);
-  }else{
-    (el.requestFullscreen||el.webkitRequestFullscreen).call(el);
-  }
+  var on = document.body.classList.toggle("fs");
+  var b = document.getElementById("full");
+  if(b) b.textContent = on ? "⛶ 退出全屏" : "⛶ 全屏";
+  setTimeout(layout, 60);        /* 可用区域变了，重算画面适配 */
 }
 document.getElementById("full").addEventListener("click",toggleFull);
+document.getElementById("fsExit").addEventListener("click",toggleFull);
 /* 双击留给「放大/还原」（绑在 frame 上，黑边区域双击也有效）；全屏只用按钮或 F 键 */
 
 /* ---- 键盘：空格播放/暂停，←→ 以 2% 步进快退快进，Home/End 首尾，F 全屏 ---- */
