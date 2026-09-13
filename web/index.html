@@ -233,7 +233,7 @@ section.stage{
 .pulse{width:6px;height:6px;background:#fff;flex:0 0 auto;animation:pulse 2s cubic-bezier(.4,0,.6,1) infinite}
 .pulse.idle{animation:none;opacity:.35;background:#8E8E93}
 
-.canvas-area{flex:1 1 auto;position:relative;overflow:hidden;min-height:0;display:flex;align-items:center;justify-content:center;padding:14px}
+.canvas-area{flex:1 1 auto;position:relative;overflow:hidden;min-height:0;display:flex;align-items:center;justify-content:center;padding:22px}
 
 /* 取景器四角括号 */
 .vf{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
@@ -415,10 +415,12 @@ footer.hist.collapsed .hist-head{margin-bottom:0}
   }
   /* 窄屏是整页滚动，参数区不该再自己滚一层（否则手机上会出现「滚动套滚动」） */
   .rail-top{overflow:visible}
-  /* 舞台要够高：预览框里装的是整个回放页（它自己的顶栏 40 + 底栏 87 都算在内），
-     矮了就会出现「高度不够 → 画面按高度缩 → 左右露白」。86vh 让常见竖屏
-     也能把画面顶满预览框的宽度。 */
-  section.stage{min-height:86vh}
+  /* 舞台高度分两种：还没出图（空态）时只要一个体面的提示区，做高了显得傻大；
+     真出了图才需要 86vh —— 预览框里装的是整个回放页（顶栏 40 + 底栏 87 都算在内），
+     矮了就会出现「高度不够 → 画面按高度缩 → 左右露白」。
+     has-art 由 showViewport()/showEmpty() 切换。 */
+  section.stage{min-height:46vh}
+  body.has-art section.stage{min-height:86vh}
   .canvas-area{padding:10px}
   .hud{padding:0 14px;gap:10px}
   .hud .v.hide-sm{display:none}  .brand .sub{display:none}
@@ -867,6 +869,7 @@ function showEmpty(){
   frame.removeAttribute('srcdoc');
   currentRecId = null;              // 舞台上已经没东西了，别再把它当成「当前记录」
   canvasAR = 0;                     // 回到「还没有产物」
+  document.body.classList.remove('has-art');   // 窄屏舞台回到「别傻大」的矮高度
   sizePreviewSlot();
   /* 三个链接的 href 也要摘掉。删单条 / 清空历史会把对应记录的 objectURL revoke 掉，
      留着 href 就是一个指向失效 blob 的死链（.off 只挡鼠标，右键复制链接照样能拿到）。 */
@@ -878,6 +881,7 @@ function showViewport(isReplay){
   viewport.style.display = '';
   $('thumb').style.display = isReplay ? 'none' : 'block';
   frame.style.display = isReplay ? 'block' : 'none';
+  document.body.classList.add('has-art');      // 有图了：窄屏舞台给足高度
   sizePreviewSlot();
 }
 /* ★ 预览框的宽高比必须等于作品的宽高比，否则回放页里那张图只能在中间占一条、
@@ -887,6 +891,7 @@ function showViewport(isReplay){
    于是 .stage 恰好等于作品比例，画面顶满框，一点空白都不剩。 */
 let canvasAR = 0;                       // 作品的宽高比
 const CHROME_FALLBACK = 127;            // 回放页顶栏 40 + 底栏 87（实测恒定）
+const NARROW = '(max-width:1040px)';    // 与 CSS 里「上下堆叠」的断点保持一致
 function previewChromeH(){
   /* 优先从 iframe 里实测：底栏会随宽度换行，硬编码不是长久之计。
      拿不到（还没加载完 / 跨域）就退回实测值。 */
@@ -903,7 +908,10 @@ function sizePreviewSlot(){
   const area = document.querySelector('.canvas-area');
   const slot = $('slot');
   if(!area || !slot) return;
-  if(!canvasAR){ slot.style.width = ''; slot.style.height = ''; return; }
+  /* 只在窄屏做补偿：那时预览区又窄又高，不补偿就会「高度不够 → 画面按高度缩
+     → 左右露白」。空态和桌面端都直接铺满可用区（桌面本来就宽，收窄反而显小）。 */
+  const narrow = window.matchMedia(NARROW).matches;
+  if(!canvasAR || !narrow){ slot.style.width = ''; slot.style.height = ''; return; }
   const cs = getComputedStyle(area);
   const availW = Math.max(120, area.clientWidth  - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
   const availH = Math.max(120, area.clientHeight - parseFloat(cs.paddingTop)  - parseFloat(cs.paddingBottom));
