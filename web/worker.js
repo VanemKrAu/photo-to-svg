@@ -117,7 +117,10 @@ async function cacheSummary() {
 
 /* 带进度回调的取文件（运行时 30 MB，得让用户看到在动） */
 async function fetchBytes(url, label) {
-  const r = await fetch(url);
+  /* cache:'no-cache' = 每次都向服务器验证一遍（带 ETag，没变就 304、不重传内容）。
+     不加的话会吃 GitHub Pages 的 max-age=600 强缓存 —— 部署后 10 分钟内
+     生成的作品可能还在跑旧脚本，「刚改的怎么没生效」多半就是这个原因。 */
+  const r = await fetch(url, { cache: 'no-cache' });
   if (!r.ok) throw new Error(`取不到 ${label}（HTTP ${r.status}）`);
   const total = Number(r.headers.get('content-length') || 0);
   if (!r.body || !total) return new Uint8Array(await r.arrayBuffer());
