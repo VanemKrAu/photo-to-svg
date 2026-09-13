@@ -253,7 +253,7 @@ TEMPLATE = r'''<!DOCTYPE html>
     border-bottom:1px solid var(--line);background:linear-gradient(180deg,#141422,#0d0d16)}
   header h1{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto}
   header .n{font-size:11px;color:var(--dim);white-space:nowrap;font-variant-numeric:tabular-nums}
-  .stage{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;
+  .stage{position:relative;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;
     padding:8px;gap:14px}
   /* .frame 是「视口」：撑满整个可用区域，图片按适配尺寸居中显示。
      不要给它 aspect-ratio —— 那样它会缩成「贴着图片的小框」，
@@ -305,10 +305,13 @@ TEMPLATE = r'''<!DOCTYPE html>
   #toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(10,10,16,.86);
     border:1px solid var(--line);border-radius:8px;padding:10px 16px;font-size:13px;display:none;pointer-events:none}
 
-  /* 缩放控件：放在底部控制栏里、按钮行的上一行。
-     原来是浮在画面右下角，放大后正好压住图，手机上很碍事。 */
-  .zoombar{display:flex;gap:3px;align-items:center;justify-content:center;
-    flex:1 1 auto;min-width:0}
+  /* 缩放控件：毛玻璃浮框，钉在「界面」右下角（画面区底部，紧挨底部工具栏上方）。
+     定位基准是 .stage（整个观感区域）而不是 .frame（画面）——
+     相对画面定位时它会跟着图走，图小的时候正好压在图上。 */
+  .zoombar{position:absolute;right:10px;bottom:10px;z-index:10;
+    display:flex;gap:3px;align-items:center;
+    background:rgba(10,10,16,.74);border:1px solid var(--line);border-radius:9px;
+    padding:4px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
   .zoombar button{font:inherit;font-size:13px;line-height:1;color:var(--text);
     background:transparent;border:0;border-radius:6px;padding:6px 8px;cursor:pointer;
     min-width:30px;text-align:center;flex:0 0 auto}
@@ -373,6 +376,13 @@ TEMPLATE = r'''<!DOCTYPE html>
     <div id="toast">绘制中…</div>
   </div>
   <div id="side"><div class="tag">原图</div></div>
+  <div class="zoombar" id="zoombar">
+    <button id="zOut" title="缩小（滚轮 / 双指捏合）">−</button>
+    <span class="lvl" id="zLvl">100%</span>
+    <button id="zIn" title="放大（滚轮 / 双指捏合）">＋</button>
+    <button id="zFit" title="适应窗口（按 0）">⤢</button>
+    <button id="zRst" title="实际大小（按 1）">1:1</button>
+  </div>
 </div>
 
 <footer>
@@ -381,15 +391,6 @@ TEMPLATE = r'''<!DOCTYPE html>
       <div class="track"></div><div class="fill" id="fill"></div><div class="knob" id="knob"></div>
     </div>
     <span class="meta" id="pct">0%</span>
-  </div>
-  <div class="row">
-    <div class="zoombar" id="zoombar">
-      <button id="zOut" title="缩小（滚轮 / 双指捏合）">−</button>
-      <span class="lvl" id="zLvl">100%</span>
-      <button id="zIn" title="放大（滚轮 / 双指捏合）">＋</button>
-      <button id="zFit" title="适应窗口（按 0）">⤢</button>
-      <button id="zRst" title="实际大小（按 1）">1:1</button>
-    </div>
   </div>
   <div class="row scroll">
     <button id="play">▶ 播放</button>

@@ -633,14 +633,21 @@
   .frame{position:relative;flex:1 1 auto;min-width:0;align-self:stretch;overflow:hidden;touch-action:none}
   /* 跟随缩放/平移的「画面」容器：canvas 和对照层都放里面，一次 transform 全部同步 */
   .view{position:absolute;left:0;top:0;will-change:transform}` },
+    { from: `  .stage{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;
+    padding:8px;gap:14px}`,
+      to: `  .stage{position:relative;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;
+    padding:8px;gap:14px}` },
     { from: `  /* 缩放控件：浮在画框右下角 */
   .zoombar{position:absolute;right:10px;bottom:10px;display:flex;gap:3px;z-index:5;
     background:rgba(10,10,16,.74);border:1px solid var(--line);border-radius:9px;
     padding:4px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}`,
-      to: `  /* 缩放控件：放在底部控制栏里、按钮行的上一行。
-     原来是浮在画面右下角，放大后正好压住图，手机上很碍事。 */
-  .zoombar{display:flex;gap:3px;align-items:center;justify-content:center;
-    flex:1 1 auto;min-width:0}` },
+      to: `  /* 缩放控件：毛玻璃浮框，钉在「界面」右下角（画面区底部，紧挨底部工具栏上方）。
+     定位基准是 .stage（整个观感区域）而不是 .frame（画面）——
+     相对画面定位时它会跟着图走，图小的时候正好压在图上。 */
+  .zoombar{position:absolute;right:10px;bottom:10px;z-index:10;
+    display:flex;gap:3px;align-items:center;
+    background:rgba(10,10,16,.74);border:1px solid var(--line);border-radius:9px;
+    padding:4px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}` },
     { re: /(    )<canvas id="art" width="(\d+)" height="(\d+)"><\/canvas>\n(    )<div id="ghost"><\/div>\n(    )<div id="split"><\/div>/,
       to: `$1<div class="view" id="view">\n$1  <canvas id="art" width="$2" height="$3"></canvas>\n$1  <div id="ghost"></div>\n$1  <div id="split"></div>` },
     { from: `    <div id="split"></div>\n    <div id="toast">`,
@@ -665,6 +672,13 @@
   </div>`,
       to: `  </div>
   <div id="side"><div class="tag">原图</div></div>
+  <div class="zoombar" id="zoombar">
+    <button id="zOut" title="缩小（滚轮 / 双指捏合）">−</button>
+    <span class="lvl" id="zLvl">100%</span>
+    <button id="zIn" title="放大（滚轮 / 双指捏合）">＋</button>
+    <button id="zFit" title="适应窗口（按 0）">⤢</button>
+    <button id="zRst" title="实际大小（按 1）">1:1</button>
+  </div>
 </div>
 
 <footer>
@@ -673,15 +687,6 @@
       <div class="track"></div><div class="fill" id="fill"></div><div class="knob" id="knob"></div>
     </div>
     <span class="meta" id="pct">0%</span>
-  </div>
-  <div class="row">
-    <div class="zoombar" id="zoombar">
-      <button id="zOut" title="缩小（滚轮 / 双指捏合）">−</button>
-      <span class="lvl" id="zLvl">100%</span>
-      <button id="zIn" title="放大（滚轮 / 双指捏合）">＋</button>
-      <button id="zFit" title="适应窗口（按 0）">⤢</button>
-      <button id="zRst" title="实际大小（按 1）">1:1</button>
-    </div>
   </div>` },
     { re: /(var CV=document\.getElementById\("art"\), W=\d+, H=\d+;\n)/,
       to: `$1var fitW=0, fitH=0;                     /* 图片的「适配尺寸」：显示在视口中央的基准大小 */\n` },
