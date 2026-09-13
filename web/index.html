@@ -827,6 +827,8 @@ function show(f){
     const w = im.naturalWidth, h = im.naturalHeight;
     $('srcDims').textContent = w + ' × ' + h + ' · ' + fmtSize(f.size);
     setHud(undefined, 'SOURCE ' + w + '×' + h, 'CANVAS ' + w + ' PT');
+    canvasAR = w / h;          // 预览框跟着这张图的比例走
+    sizePreviewSlot();
   };
   im.src = url;
   // 左栏源图卡：把占位换成缩略图
@@ -900,6 +902,8 @@ function showEmpty(){
   $('tc').textContent = '00:00 / 00:00';
   $('tc').title = '';
   currentRecId = null;              // 舞台上已经没东西了，别再把它当成「当前记录」
+  canvasAR = 0;                     // 预览框回到「撑满」
+  sizePreviewSlot();
   /* 三个链接的 href 也要摘掉。删单条 / 清空历史会把对应记录的 objectURL revoke 掉，
      留着 href 就是一个指向失效 blob 的死链（.off 只挡鼠标，右键复制链接照样能拿到）。 */
   ['openHtml','dlSvg','dlHtml'].forEach((id) => { $(id).removeAttribute('href'); });
@@ -910,6 +914,28 @@ function showViewport(isReplay){
   viewport.style.display = '';
   $('thumb').style.display = isReplay ? 'none' : 'block';
   frame.style.display = isReplay ? 'block' : 'none';
+  sizePreviewSlot();
+}
+/* 预览框按作品的实际宽高比显示。
+   固定的 100%×100% 会让竖图在一个又宽又扁的框里缩成很小一条 ——
+   这里算「能塞进可用区域的最大等比尺寸」，横图上下留白、竖图左右留白，
+   画面本身始终占满其中一个方向。 */
+let canvasAR = 0;                       // 作品的宽高比（0 = 还没有产物，撑满即可）
+function sizePreviewSlot(){
+  const area = document.querySelector('.canvas-area');
+  const slot = $('slot');
+  if(!area || !slot) return;
+  if(!canvasAR){
+    slot.style.width = ''; slot.style.height = '';
+    return;
+  }
+  const a = area.getBoundingClientRect();
+  const availW = Math.max(120, a.width - 34);    // 扣掉 .canvas-area 的内边距与边框
+  const availH = Math.max(120, a.height - 34);
+  let w = availW, h = w / canvasAR;
+  if(h > availH){ h = availH; w = h * canvasAR; }
+  slot.style.width = Math.round(w) + 'px';
+  slot.style.height = Math.round(h) + 'px';
 }
 function setToolsEnabled(on){
   $('playBtn').disabled = !on;
@@ -987,15 +1013,20 @@ let remoteTimer = null, zoomProbe = null;
  * 不用「新标签页」：blob URL 只在创建它的文档里有效，Android WebView 打开
  * 新标签页会得到空白页。这里用 srcdoc 注入，纯 DOM、不经过 URL 加载。 */
 let previewReturnTo = null;            // 打开预览前焦点在哪，关闭时还回去
-/* 页面内预览用的 HTML：把回放页自己的顶栏藏掉。
-   主页面 HUD 已经写着标题 / 笔数 / 进度，回放页那条顶栏是重复的一条，
-   而它正好吃掉画面的高度 —— iframe 高 533 时画面区能因此多出 44px。
-   只改内存里的预览副本：下载出去的 .html 仍是完整的（含自己的顶栏）。 */
+/* 页面内预览用的 HTML：把回放页自带的控件全部藏掉。
+   宿主这组控件已经通过 postMessage 协议与回放页对接（能真正控制它），
+   再显示回放页自己那一套就是两套重复的工具栏，而且白占画面高度。
+   两种页面结构都要覆盖：
+     · 真实回放页（tools/svg2canvas.py 产物）用 <header>/<footer>
+     · 内置演示页用 .zb（缩放条）+ #gb（对照）+ #hud/#ttl（信息角标）
+   只改内存里的预览副本：下载出去的 .html 仍是完整的、独立可用。 */
 function previewHtml(html){
   if(!html) return html;
   const i = html.indexOf('</head>');
   if(i < 0) return html;
-  return html.slice(0, i) + '<style>header{display:none!important}</style>' + html.slice(i);
+  return html.slice(0, i) +
+    '<style>header,footer,.zb,#gb,#hud,#ttl{display:none!important}</style>' +
+    html.slice(i);
 }
 function openPreview(htmlText){
   if(!htmlText){ toast('还没有可预览的内容', true); return; }
@@ -2676,7 +2707,8 @@ async function onDone(m){
   $('szSvg').textContent = fmtSize(m.svgBytes);
   $('szHtml').textContent = fmtSize(m.htmlBytes);
 
-  // 舞台：显示回放页（预览副本藏掉它自己的顶栏，见 previewHtml）
+  // 舞台：显示回放页（预览副本藏掉它自己的顶栏+底栏，见 previewHtml）
+  if(m.size && m.size[0] && m.size[1]) canvasAR = m.size[0] / m.size[1];
   frame.srcdoc = previewHtml(lastHtmlText);
   showViewport(true);
   setToolsEnabled(true);
@@ -2840,7 +2872,7 @@ $('hClear').addEventListener('click', async () => {
 
 /* 窗口尺寸变化时重算底部控制条的比例显示。四角括号和网格都是绝对定位的纯 CSS，
    不需要 JS 参与 —— 原来的注释写「保持角标和网格在位」，与实际做的事不符。 */
-window.addEventListener('resize', () => { syncReplayUI(); });
+window.addEventListener('resize', () => { syncReplayUI(); sizePreviewSlot(); });
 
 /* ---------------- 启动 ---------------- */
 (async () => {

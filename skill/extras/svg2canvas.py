@@ -686,15 +686,20 @@ Array.prototype.forEach.call(document.querySelectorAll(".sp button"),function(b)
 
 /* ---- 对照原图 ---- */
 var ghostOn=true, ghostEl=document.getElementById("ghost");
-document.getElementById("ghostBtn").addEventListener("click",function(){
-  ghostOn=!ghostOn; this.classList.toggle("on",ghostOn);
+/* 抽成函数：按钮点击和宿主指令（ghost:set）都要走同一条路径 */
+function setGhost(on){
+  ghostOn = !!on;
+  var b = document.getElementById("ghostBtn");
+  if(b) b.classList.toggle("on", ghostOn);
   if(sideMode()){ layout(); }
   else{
-    ghostEl.style.display=ghostOn?"block":"none";
-    splitEl.style.display=ghostOn?"block":"none";
+    ghostEl.style.display = ghostOn ? "block" : "none";
+    splitEl.style.display = ghostOn ? "block" : "none";
   }
   layout();
-});
+  reportHost("ghost:state", { on: ghostOn });
+}
+document.getElementById("ghostBtn").addEventListener("click",function(){ setGhost(!ghostOn); });
 var frame=document.getElementById("frame"), VIEW=document.getElementById("view"),
     SIDEVIEW=document.getElementById("sideView");
 function setSplit(clientX){
@@ -989,6 +994,38 @@ document.getElementById("zIn").onclick  = function(){ pause(); zoomBy(1.4); };
 document.getElementById("zOut").onclick = function(){ pause(); zoomBy(1 / 1.4); };
 document.getElementById("zFit").onclick = function(){ pause(); resetView(); resetSide(); };
 document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fitScale); setZoomAt2(1 / fitScale); };
+
+/* ---------- 宿主通信（网页版把本页嵌在 iframe 里时用） ----------
+   网页版自己有一组播放 / 缩放 / 对照控件，要能真正驱动这个页面。
+   独立打开时 parent === window，整段等于没有开销。 */
+function reportHost(type, extra){
+  try{
+    if(window.parent && window.parent !== window){
+      window.parent.postMessage(Object.assign({ type: type }, extra || {}), "*");
+    }
+  }catch(_){}
+}
+window.addEventListener("message", function(e){
+  var d = e.data;
+  if(!d || typeof d !== "object" || typeof d.type !== "string") return;
+  switch(d.type){
+    case "replay:play":  play(); break;
+    case "replay:pause": pause(); break;
+    /* 宿主给的是秒，内部按笔序号推进，这里换算一下 */
+    case "replay:seek":  pause(); seekTo((d.t || 0) / DURATION * N); break;
+    case "replay:speed": speed = Number(d.v) || 1; break;
+    case "zoom:in":      pause(); zoomBy(1.4); break;
+    case "zoom:out":     pause(); zoomBy(1 / 1.4); break;
+    case "zoom:fit":     pause(); resetView(); resetSide(); break;
+    case "zoom:1":       pause(); setZoomAt(1 / fitScale); setZoomAt2(1 / fitScale); break;
+    case "ghost:set":    setGhost(d.on); break;
+  }
+});
+/* 每 250ms 回报进度与缩放，宿主据此同步它那条工具条 */
+setInterval(function(){
+  reportHost("replay:tick", { t: timePos * DURATION, total: DURATION, playing: playing });
+  reportHost("zoom:state", { s: (lastPane === "right" ? zoom2.s : zoom.s), fit: fitScale });
+}, 250);
 
 clearAll(); syncUI();
 setTimeout(function(){ layout(); play(); },600);
