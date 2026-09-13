@@ -663,7 +663,7 @@ footer.hist.collapsed .hist-head{margin-bottom:0}
        这里的 <a> 只是文本链接，不加载任何外部资源，不违反「零外部依赖」。 -->
   <div class="credit">
     基于 <a href="https://github.com/AvroraCL/image-to-css-art" target="_blank" rel="noopener">AvroraCL/image-to-css-art</a>（MIT 许可）
-    · 本页为 photo-to-svg 的 SVG 输出扩展
+    · 本项目 <a href="https://github.com/VanemKrAu/photo-to-svg" target="_blank" rel="noopener">photo-to-svg</a>
     · 运行时由 <a href="https://pyodide.org" target="_blank" rel="noopener">Pyodide</a> 在浏览器本地执行 Python，图片不上传
   </div>
 </footer>
@@ -987,11 +987,21 @@ let remoteTimer = null, zoomProbe = null;
  * 不用「新标签页」：blob URL 只在创建它的文档里有效，Android WebView 打开
  * 新标签页会得到空白页。这里用 srcdoc 注入，纯 DOM、不经过 URL 加载。 */
 let previewReturnTo = null;            // 打开预览前焦点在哪，关闭时还回去
+/* 页面内预览用的 HTML：把回放页自己的顶栏藏掉。
+   主页面 HUD 已经写着标题 / 笔数 / 进度，回放页那条顶栏是重复的一条，
+   而它正好吃掉画面的高度 —— iframe 高 533 时画面区能因此多出 44px。
+   只改内存里的预览副本：下载出去的 .html 仍是完整的（含自己的顶栏）。 */
+function previewHtml(html){
+  if(!html) return html;
+  const i = html.indexOf('</head>');
+  if(i < 0) return html;
+  return html.slice(0, i) + '<style>header{display:none!important}</style>' + html.slice(i);
+}
 function openPreview(htmlText){
   if(!htmlText){ toast('还没有可预览的内容', true); return; }
   previewReturnTo = document.activeElement;
   pvFrame.removeAttribute('src');
-  pvFrame.srcdoc = htmlText;
+  pvFrame.srcdoc = previewHtml(htmlText);
   preview.classList.add('on');
   try{ preview.focus(); }catch(_){}
 }
@@ -2012,7 +2022,7 @@ async function renderHistory(){
         clearInterval(tickTimer);
         clearTimeout(remoteTimer);   // 上一次点播放留下的那个 500ms 探测哨兵
         clearTimeout(zoomProbe);
-        frame.srcdoc = lastHtmlText;
+        frame.srcdoc = previewHtml(lastHtmlText);
         probeRemote();
         showViewport(true);
         $('playBtn').disabled = false;
@@ -2666,8 +2676,8 @@ async function onDone(m){
   $('szSvg').textContent = fmtSize(m.svgBytes);
   $('szHtml').textContent = fmtSize(m.htmlBytes);
 
-  // 舞台：显示回放页
-  frame.srcdoc = lastHtmlText;
+  // 舞台：显示回放页（预览副本藏掉它自己的顶栏，见 previewHtml）
+  frame.srcdoc = previewHtml(lastHtmlText);
   showViewport(true);
   setToolsEnabled(true);
   clearInterval(tickTimer);
