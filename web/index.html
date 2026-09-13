@@ -464,6 +464,7 @@
   const bar = $('bar'), barFill = $('barFill'), status = $('status'), logEl = $('log');
 
   let file = null, worker = null, ready = false, busy = false;
+  let lastHtmlText = '';   // 最近一次生成的回放页源码（预览用 srcdoc，见 openPreview）
 
   /* ---------- 选项 ---------- */
   function seg(id, cb){
@@ -539,24 +540,29 @@
    * Android WebView（VIA 等调用系统内核的浏览器）打开新标签页会得到
    * 空白页（Chrome 自带完整内核所以没事）。页面内 iframe 属于同一文档，
    * blob 一定有效；桌面端也顺便少开一个标签页。 */
-  function openPreview(url, title){
+  function openPreview(htmlText, title){
     $('pvTitle').textContent = title || '回放预览';
-    $('pvFrame').src = url;
+    /* 用 srcdoc 注入、而不是 blob URL：Android WebView（VIA 等调用系统内核的
+       浏览器）默认拦掉 blob: 协议 —— 新标签页和 iframe 都会得到空白页；
+       srcdoc 是纯 DOM 注入、不经过 URL 加载，所有浏览器都认。 */
+    $('pvFrame').removeAttribute('src');
+    $('pvFrame').srcdoc = htmlText;
     $('preview').classList.add('on');
   }
   function closePreview(){
     if(!$('preview').classList.contains('on')) return;
     $('preview').classList.remove('on');
-    $('pvFrame').src = 'about:blank';     // 停掉回放，释放内存
+    $('pvFrame').removeAttribute('srcdoc');   // 丢弃内容，释放内存
+    $('pvFrame').src = 'about:blank';
   }
   $('pvClose').addEventListener('click', closePreview);
   document.addEventListener('keydown', function(e){
     if(e.key === 'Escape') closePreview();
   });
-  /* 结果卡的「预览」：拦掉默认的新标签页行为，改走页面内全屏 */
+  /* 结果卡的「预览」：拦掉默认的新标签页行为，改走页面内全屏（srcdoc） */
   $('openHtml').addEventListener('click', function(e){
     e.preventDefault();
-    openPreview(this.href, $('title').value || '回放预览');
+    openPreview(lastHtmlText, $('title').value || '回放预览');
   });
 
   /* ---------- 历史（IndexedDB） ----------
@@ -951,8 +957,8 @@ frame.addEventListener("dblclick", function(e){
         b.onclick = fn; acts.appendChild(b); return b;
       };
       mk('▶ 预览', 'p', async () => {
-        const url = await htmlUrlOf(r);      // 旧记录会先升级时间轴与布局（见 upgradeAxis）
-        openPreview(url, r.title || r.name); // 页面内全屏（新标签页在 WebView 里打不开 blob）
+        const html = await upgradeAxis(r);       // 旧记录会先升级时间轴与布局
+        openPreview(await html.text(), r.title || r.name);
       }, '全屏预览回放页');
       mk('⬇ SVG', '', () => {
         const a = document.createElement('a');
@@ -1121,6 +1127,7 @@ frame.addEventListener("dblclick", function(e){
 
     const svgBlob = new Blob([m.svg], { type: 'image/svg+xml' });
     const htmlBlob = new Blob([m.html], { type: 'text/html' });
+    lastHtmlText = new TextDecoder().decode(m.html);   // 预览走 srcdoc，见 openPreview
     const name = ($('title').value || 'artwork').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40) || 'artwork';
 
     const urlSvg = URL.createObjectURL(svgBlob);
@@ -1136,7 +1143,7 @@ frame.addEventListener("dblclick", function(e){
       m.strokes.toLocaleString() + ' 个色块 · 画布 ' + m.size.join('×') +
       ' · 回放页可直接在手机或电脑打开';
 
-    $('frame').src = urlHtml;
+    $('frame').srcdoc = lastHtmlText;   // 结果卡的预览同样走 srcdoc（WebView 会拦 blob）
     $('result').style.display = 'block';
     $('outCard').classList.add('hasResult');
 
