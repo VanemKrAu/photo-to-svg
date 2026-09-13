@@ -233,7 +233,7 @@ section.stage{
 .pulse{width:6px;height:6px;background:#fff;flex:0 0 auto;animation:pulse 2s cubic-bezier(.4,0,.6,1) infinite}
 .pulse.idle{animation:none;opacity:.35;background:#8E8E93}
 
-.canvas-area{flex:1 1 auto;position:relative;overflow:hidden;min-height:0;display:flex;align-items:center;justify-content:center;padding:22px}
+.canvas-area{flex:1 1 auto;position:relative;overflow:hidden;min-height:0;display:flex;align-items:center;justify-content:center;padding:14px}
 
 /* 取景器四角括号 */
 .vf{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
@@ -249,15 +249,18 @@ section.stage{
 /* 画面 */
 .viewport{position:relative;z-index:2;display:flex;align-items:center;justify-content:center;width:100%;height:100%;overflow:hidden}
 /* 画面槽必须自己有确定尺寸：只给 max-* 的话里面的 iframe 拿不到高度，
-   会退回 300x150 的默认尺寸（预览看起来就"很小"）。 */
+   会退回 300x150 的默认尺寸（预览看起来就"很小"）。
+   ★ 这里必须是 100%×100%，绝不能再按作品比例去缩：
+   回放页（iframe 内部）自己就会按作品比例适配并居中，宿主再缩一次就是
+   「双重缩小」——实测桌面 1026 宽的可用区里只画出 510 宽的浅灰小卡片，
+   左右各空 258px。宿主只负责「给满」，适配交给里面那层。 */
 .viewport .slot{
-  position:relative;background:#f0f0f0;overflow:hidden;
-  border:1px solid var(--hairline);
+  position:relative;background:var(--surface-dark);overflow:hidden;
   width:100%;height:100%;
   display:flex;align-items:center;justify-content:center;
 }
 .viewport .slot img{display:block;max-width:100%;max-height:100%}
-.viewport .slot iframe{display:block;width:100%;height:100%;border:0;background:#f0f0f0}
+.viewport .slot iframe{display:block;width:100%;height:100%;border:0;background:var(--surface-dark)}
 
 /* 空态 */
 .empty{
@@ -412,8 +415,10 @@ footer.hist.collapsed .hist-head{margin-bottom:0}
   }
   /* 窄屏是整页滚动，参数区不该再自己滚一层（否则手机上会出现「滚动套滚动」） */
   .rail-top{overflow:visible}
-  section.stage{min-height:62vh}
-  .canvas-area{padding:16px}
+  /* 舞台要够高：预览区里装的是整个回放页（它自己的 HUD 40 + 底栏 87 都算在内），
+     62vh 时手机上作品只剩两百来像素宽。78vh 让小屏竖图也能铺满预览的宽度。 */
+  section.stage{min-height:78vh}
+  .canvas-area{padding:10px}
   .hud{padding:0 14px;gap:10px}
   .hud .v.hide-sm{display:none}  .brand .sub{display:none}
   .tools{padding:10px 14px;gap:10px}
@@ -799,8 +804,7 @@ function show(f){
     const w = im.naturalWidth, h = im.naturalHeight;
     $('srcDims').textContent = w + ' × ' + h + ' · ' + fmtSize(f.size);
     setHud(undefined, 'SOURCE ' + w + '×' + h, 'CANVAS ' + w + ' PT');
-    canvasAR = w / h;          // 预览框跟着这张图的比例走
-    sizePreviewSlot();
+    canvasAR = w / h;          // 只作记录；预览尺寸由回放页自己算，宿主不再缩
   };
   im.src = url;
   // 左栏源图卡：把占位换成缩略图
@@ -860,8 +864,7 @@ function showEmpty(){
   // 把旧回放页卸掉：否则它在看不见的地方继续跑 rAF + 250ms 定时器，白烧 CPU
   frame.removeAttribute('srcdoc');
   currentRecId = null;              // 舞台上已经没东西了，别再把它当成「当前记录」
-  canvasAR = 0;                     // 预览框回到「撑满」
-  sizePreviewSlot();
+  canvasAR = 0;
   /* 三个链接的 href 也要摘掉。删单条 / 清空历史会把对应记录的 objectURL revoke 掉，
      留着 href 就是一个指向失效 blob 的死链（.off 只挡鼠标，右键复制链接照样能拿到）。 */
   ['openHtml','dlSvg','dlHtml'].forEach((id) => { $(id).removeAttribute('href'); });
@@ -872,29 +875,14 @@ function showViewport(isReplay){
   viewport.style.display = '';
   $('thumb').style.display = isReplay ? 'none' : 'block';
   frame.style.display = isReplay ? 'block' : 'none';
-  sizePreviewSlot();
 }
-/* 预览框按作品的实际宽高比显示。
-   固定的 100%×100% 会让竖图在一个又宽又扁的框里缩成很小一条 ——
-   这里算「能塞进可用区域的最大等比尺寸」，横图上下留白、竖图左右留白，
-   画面本身始终占满其中一个方向。 */
-let canvasAR = 0;                       // 作品的宽高比（0 = 还没有产物，撑满即可）
-function sizePreviewSlot(){
-  const area = document.querySelector('.canvas-area');
-  const slot = $('slot');
-  if(!area || !slot) return;
-  if(!canvasAR){
-    slot.style.width = ''; slot.style.height = '';
-    return;
-  }
-  const a = area.getBoundingClientRect();
-  const availW = Math.max(120, a.width - 34);    // 扣掉 .canvas-area 的内边距与边框
-  const availH = Math.max(120, a.height - 34);
-  let w = availW, h = w / canvasAR;
-  if(h > availH){ h = availH; w = h * canvasAR; }
-  slot.style.width = Math.round(w) + 'px';
-  slot.style.height = Math.round(h) + 'px';
-}
+/* ★ 这里原本有个 sizePreviewSlot()，按作品宽高比把 .slot 缩成一个等比盒子。
+   它与回放页内部的 layout() 重复：iframe 里的 stage/view 本来就是「按可用空间
+   等比缩放并居中」，宿主再缩一次就成了双重缩放，于是桌面 1026px 的可用区里
+   只画出一张 510px 宽的浅灰卡片，左右各留 258px 空白。
+   现在整条尺寸逻辑撤掉，.slot 恒为 100%×100%，适配只由回放页自己做。
+   canvasAR 仍然记录作品比例，供 HUD / 导出等处使用。 */
+let canvasAR = 0;                       // 作品的宽高比（仅记录，不再参与预览尺寸计算）
 /* 只留下载入口这三个链接要跟着可用状态走。
    播放 / 倍速 / 缩放 / 对照都归回放页自己的工具栏管，宿主不再插手。 */
 function setToolsEnabled(on){
@@ -1774,10 +1762,8 @@ document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fit
    只在几个固定时机调用是不够的：生成完成时历史区会折叠、舞台高度瞬间变大，
    而那次调用发生在折叠之前，于是拿的是旧高度（预览框因此偏扁）；
    窗口 resize、侧栏重排同理。交给 ResizeObserver 最稳。 */
-if(window.ResizeObserver){
-  const area = document.querySelector('.canvas-area');
-  if(area) new ResizeObserver(() => sizePreviewSlot()).observe(area);
-}
+/* 这里原本挂了一个 ResizeObserver 去重算 .slot 的等比尺寸。
+   尺寸逻辑撤掉后它没有意义了：.slot 恒为 100%，容器怎么变它自己就跟着变。 */
 
 /* ---------------- 渲染历史 ---------------- */
 async function renderHistory(){
@@ -2655,7 +2641,6 @@ $('hClear').addEventListener('click', async () => {
 
 /* 窗口尺寸变化时重算底部控制条的比例显示。四角括号和网格都是绝对定位的纯 CSS，
    不需要 JS 参与 —— 原来的注释写「保持角标和网格在位」，与实际做的事不符。 */
-window.addEventListener('resize', () => { sizePreviewSlot(); });
 
 /* ---------------- 启动 ---------------- */
 (async () => {
