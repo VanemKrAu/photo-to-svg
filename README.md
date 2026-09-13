@@ -1,4 +1,8 @@
-<h1 align="center">photo-to-svg</h1>
+<h1 align="center">
+  <img src="assets/icon.png" width="72" alt="photo-to-svg logo" />
+  <br />
+  photo-to-svg
+</h1>
 
 把一张照片变成**逐笔绘制的 SVG 矢量插画**，并生成一个能回放整个作画过程的网页。
 
