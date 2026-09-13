@@ -261,17 +261,30 @@ TEMPLATE = r'''<!DOCTYPE html>
      都得自带图标 —— 不要换成外部文件引用，那样一挪位置就没了。 -->
 <link rel="icon" href="data:image/png;base64,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">
 <style>
-  :root{--bg:#07070a;--panel:#131320;--line:#282842;--gold:#c9a227;--text:#e9e9f2;--dim:#71718c;
+  /* 配色与主页面（取景器版）同源：石墨黑 + 银灰，不再用金色。
+     回放页是独立文件 —— 下载到哪儿、发给谁，都得自带这套观感。 */
+  :root{--bg:#0B0B0D;--graphite:#131316;--panel:#18181C;--line:#26262B;--hilite:#1F1F24;
+    --text:#EDEDED;--muted:#8E8E93;--dim:#82828A;--btn:#F2F2F0;--ok:#8FA88C;--err:#C98A84;
+    --mono:Consolas,"Courier New","SF Mono",Menlo,monospace;
     --ghostimg:url(__GHOST__)}
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
   body{background:var(--bg);color:var(--text);overflow:hidden;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
     display:flex;flex-direction:column;-webkit-text-size-adjust:100%}
-  header{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:8px 12px;
-    border-bottom:1px solid var(--line);background:linear-gradient(180deg,#141422,#0d0d16)}
-  header h1{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto}
+  /* 顶栏 = 取景器 HUD：等宽字体、状态灯、REC 角标 */
+  header{flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:0 18px;height:40px;
+    border-bottom:1px solid var(--line);background:rgba(19,19,22,.92);
+    font:400 11px var(--mono);user-select:none}
+  header .k{color:#A8A8AE;font-weight:600;letter-spacing:.06em;white-space:nowrap}
+  header .sep{color:var(--line)}
+  header h1{font-size:11.5px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto}
   header .n{font-size:11px;color:var(--dim);white-space:nowrap;font-variant-numeric:tabular-nums}
+  header .rec{display:flex;align-items:center;gap:5px;color:var(--err);white-space:nowrap;
+    font-variant-numeric:tabular-nums}
+  header .rec i{width:6px;height:6px;border-radius:50%;background:var(--err);display:block}
+  header .rec.live i{animation:blink 1.1s steps(1,end) infinite}
+  @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:.15}}
   .stage{position:relative;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;
     padding:8px;gap:14px}
   /* .frame 是「视口」：撑满整个可用区域，图片按适配尺寸居中显示。
@@ -297,11 +310,36 @@ TEMPLATE = r'''<!DOCTYPE html>
   #side .tag{position:absolute;left:9px;top:9px;font-size:11px;letter-spacing:.5px;
     color:#f2f2f8;background:rgba(0,0,0,.48);padding:3px 9px;border-radius:5px;
     -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
-  #split{position:absolute;top:0;bottom:0;left:50%;width:2px;background:var(--gold);
-    opacity:.85;pointer-events:none;box-shadow:0 0 8px rgba(201,162,39,.6)}
-  footer{flex:0 0 auto;padding:8px 12px calc(10px + env(safe-area-inset-bottom));
-    border-top:1px solid var(--line);background:linear-gradient(0deg,#141422,#0d0d16);
-    display:flex;flex-direction:column;gap:8px}
+  #split{position:absolute;top:0;bottom:0;left:50%;width:2px;background:#E5E5E5;
+    opacity:.85;pointer-events:none;box-shadow:0 0 8px rgba(255,255,255,.35)}
+  /* 取景器装饰。都放在 .frame 内部 —— .frame 有 overflow:hidden，
+     往外放的角括号会被直接裁掉。全部 pointer-events:none，不影响操作。 */
+  .reticle{position:absolute;inset:0;pointer-events:none;opacity:.10;z-index:1}
+  .reticle .h{position:absolute;top:50%;left:0;right:0;height:1px;background:#fff}
+  .reticle .v{position:absolute;left:50%;top:0;bottom:0;width:1px;background:#fff}
+  .reticle .cross{position:absolute;top:50%;left:50%;width:20px;height:20px;transform:translate(-50%,-50%)}
+  .reticle .cross::before,.reticle .cross::after{content:"";position:absolute;background:rgba(255,255,255,.55)}
+  .reticle .cross::before{top:50%;left:0;right:0;height:1px}
+  .reticle .cross::after{left:50%;top:0;bottom:0;width:1px}
+  .reticle.grid{opacity:.055;background-image:
+    linear-gradient(rgba(255,255,255,.5) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.5) 1px,transparent 1px);
+    background-size:33.333% 33.333%}
+  .corners{position:absolute;inset:0;pointer-events:none;z-index:2}
+  .corners i{position:absolute;width:14px;height:14px;border:1.5px solid rgba(229,229,229,.85)}
+  .corners i.tl{top:8px;left:8px;border-right:0;border-bottom:0}
+  .corners i.tr{top:8px;right:8px;border-left:0;border-bottom:0}
+  .corners i.bl{bottom:8px;left:8px;border-right:0;border-top:0}
+  .corners i.br{bottom:8px;right:8px;border-left:0;border-top:0}
+  .badge{position:absolute;left:26px;top:22px;z-index:3;display:flex;align-items:center;gap:6px;
+    font:400 10px var(--mono);letter-spacing:.08em;color:rgba(237,237,237,.9);
+    background:rgba(11,11,13,.55);border:1px solid rgba(255,255,255,.14);border-radius:2px;
+    padding:3px 7px;pointer-events:none;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+  .badge i{width:5px;height:5px;border-radius:50%;background:var(--err);display:block}
+  body.done .badge i{background:var(--ok)}
+  footer{flex:0 0 auto;padding:10px 18px calc(12px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--line);background:var(--graphite);
+    display:flex;flex-direction:column;gap:9px}
   /* 伪全屏（点「全屏」或按 F）：藏起页头/页脚，画面区占满整屏。
      不用 Fullscreen API —— Android WebView（VIA 等）的宿主会把它当
      「视频全屏」处理并强制横屏，竖图也被转；CSS 方案完全绕开它。 */
@@ -309,8 +347,8 @@ TEMPLATE = r'''<!DOCTYPE html>
   body.fs .stage{padding:0}
   body.fs .zoombar{bottom:14px}
   #fsExit{display:none;position:fixed;right:10px;top:10px;z-index:30;
-    font:inherit;font-size:12.5px;color:var(--text);background:rgba(10,10,16,.74);
-    border:1px solid var(--line);border-radius:9px;padding:7px 12px;cursor:pointer;
+    font:inherit;font-size:12px;color:var(--text);background:rgba(11,11,13,.78);
+    border:1px solid var(--line);border-radius:3px;padding:7px 12px;cursor:pointer;
     -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
   body.fs #fsExit{display:block}
   /* 控制栏：窄屏下必须能横滑，否则右侧的倍速按钮会被挤出屏幕点不到 */
@@ -323,83 +361,89 @@ TEMPLATE = r'''<!DOCTYPE html>
     button{padding:6px 10px;font-size:12px}
     .sp{flex:0 0 auto}
     .keys{display:none !important}
+    /* 手机上把取景器装饰收小，别喧宾夺主 */
+    .badge{left:16px;top:14px;font-size:9px;padding:2px 6px}
+    .corners i{width:11px;height:11px}
+    .corners i.tl,.corners i.tr{top:6px}
+    .corners i.bl,.corners i.br{bottom:6px}
+    .corners i.tl,.corners i.bl{left:6px}
+    .corners i.tr,.corners i.br{right:6px}
   }
   .bar{position:relative;height:22px;flex:1 1 auto;display:flex;align-items:center;cursor:pointer;touch-action:none}
-  .bar .track{position:absolute;left:0;right:0;height:6px;border-radius:3px;background:#22223a}
-  .bar .fill{position:absolute;left:0;height:6px;border-radius:3px;width:0;
-    background:linear-gradient(90deg,#7a6420,var(--gold))}
-  .bar .knob{position:absolute;width:12px;height:12px;border-radius:50%;background:#fff;
-    transform:translateX(-6px);box-shadow:0 1px 4px rgba(0,0,0,.6)}
-  button{font:inherit;font-size:13px;color:var(--text);background:var(--panel);
-    border:1px solid var(--line);border-radius:7px;padding:7px 12px;cursor:pointer;
+  .bar .track{position:absolute;left:0;right:0;height:4px;border-radius:0;background:#222226}
+  .bar .fill{position:absolute;left:0;height:4px;border-radius:0;width:0;background:#E5E5E5}
+  .bar .knob{position:absolute;width:11px;height:11px;border-radius:50%;background:#fff;
+    transform:translateX(-5.5px);box-shadow:0 1px 4px rgba(0,0,0,.7)}
+  button{font:inherit;font-size:12.5px;color:var(--text);background:transparent;
+    border:1px solid var(--line);border-radius:3px;padding:7px 13px;cursor:pointer;
     white-space:nowrap;flex:0 0 auto}
-  button:active{background:#1b1b2c}
-  button.on{background:var(--gold);border-color:var(--gold);color:#1a1200;font-weight:600}
+  button:active{background:var(--hilite)}
+  /* 选中态用白底黑字：取景器里没有金色，最高对比度就是「已选中」 */
+  button.on{background:var(--btn);border-color:var(--btn);color:#111;font-weight:600}
   .sp{display:flex;gap:4px}
   .sp button{padding:5px 8px;font-size:11px}
-  .meta{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap}
-  #toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(10,10,16,.86);
-    border:1px solid var(--line);border-radius:8px;padding:10px 16px;font-size:13px;display:none;pointer-events:none}
+  .meta{font:400 11px var(--mono);color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap}
+  #toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(11,11,13,.9);
+    border:1px solid var(--line);border-radius:3px;padding:10px 16px;font-size:13px;display:none;pointer-events:none}
 
   /* 缩放控件：毛玻璃浮框，钉在「界面」右下角（画面区底部，紧挨底部工具栏上方）。
      定位基准是 .stage（整个观感区域）而不是 .frame（画面）——
      相对画面定位时它会跟着图走，图小的时候正好压在图上。 */
   .zoombar{position:absolute;right:10px;bottom:10px;z-index:10;
-    display:flex;gap:3px;align-items:center;
-    background:rgba(10,10,16,.74);border:1px solid var(--line);border-radius:9px;
-    padding:4px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
-  .zoombar button{font:inherit;font-size:13px;line-height:1;color:var(--text);
-    background:transparent;border:0;border-radius:6px;padding:6px 8px;cursor:pointer;
-    min-width:30px;text-align:center;flex:0 0 auto}
-  .zoombar .lvl{font-size:11px;color:var(--dim);padding:6px 3px;min-width:44px;
+    display:flex;gap:2px;align-items:center;
+    background:rgba(11,11,13,.78);border:1px solid var(--line);border-radius:3px;
+    padding:3px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+  .zoombar button{font:inherit;font-size:12.5px;line-height:1;color:var(--text);
+    background:transparent;border:0;border-radius:2px;padding:6px 8px;cursor:pointer;
+    min-width:28px;text-align:center;flex:0 0 auto}
+  .zoombar .lvl{font:400 10.5px var(--mono);color:var(--dim);padding:6px 3px;min-width:42px;
     text-align:center;font-variant-numeric:tabular-nums}
-  @media (hover:hover) and (pointer:fine){
-    .zoombar button:hover{background:#232338}
-  }
-
+  /* 键盘快捷键提示：只在桌面端显示 */
+  .keys{display:none;font:400 10.5px var(--mono);color:#5A5A60}
   /* ---------- 桌面端 / 宽屏适配 ---------- */
-  /* 窄屏：倍速组单独一行，永远点得到 */
-  @media (max-width:640px){
-    footer{padding:8px 10px calc(10px + env(safe-area-inset-bottom))}
-    .sp button{padding:5px 9px}
-  }
   @media (min-width:900px){
-    header{padding:11px 22px;gap:14px}
-    header h1{font-size:15px}
-    header .n{font-size:12px}
+    header{padding:0 22px;gap:16px;height:44px}
+    header h1{font-size:12px}
+    header .n{font-size:11.5px}
     .stage{padding:18px}
-    .frame{border-radius:7px;box-shadow:0 24px 70px rgba(0,0,0,.85),0 0 0 1px var(--line)}
-    footer{padding:12px 22px 16px;gap:10px}
-    button{font-size:13px;padding:8px 15px;border-radius:8px}
+    footer{padding:13px 22px 17px;gap:10px}
+    button{font-size:13px;padding:8px 15px}
     .sp button{font-size:12px;padding:6px 10px}
     .bar{height:26px}
-    .bar .track,.bar .fill{height:7px}
-    .meta{font-size:12px}
+    .meta{font-size:11.5px}
+    .keys{display:inline}
   }
-  @media (min-width:1440px){
-    header h1{font-size:16px}
-    .stage{padding:22px}
-    footer{padding:14px 30px 20px}
+  @media (max-width:640px){
+    header{padding:0 12px;gap:9px}
+    /* 窄屏顶栏放不下三组信息：头两段让位，标题和 REC 角标保留 */
+    header .k.hide-sm,header .sep.hide-sm{display:none}
+    footer{padding:9px 12px calc(11px + env(safe-area-inset-bottom))}
+    .sp button{padding:5px 9px}
+    /* 手机上一行放不下全部控制（320 宽时倍速三颗全被挤出视口）。
+       原来靠横向滑动兜底，但用户多半发现不了「这里能滑」——
+       改成换行，全部按钮一眼可见。 */
+    .row.scroll{flex-wrap:wrap;overflow-x:visible}
   }
   /* 只有真鼠标设备才给 hover 反馈，触屏不受影响 */
   @media (hover:hover) and (pointer:fine){
     button{transition:background .12s ease,border-color .12s ease,color .12s ease}
-    button:hover{background:#1f1f34;border-color:#3f3f66}
-    button.on:hover{background:#d9b23c;border-color:#d9b23c}
-    .bar:hover .track{background:#2c2c4a}
-    .bar:hover .knob{transform:translateX(-6px) scale(1.18)}
+    button:hover{background:var(--hilite);border-color:#3A3A42}
+    button.on:hover{background:#fff;border-color:#fff}
+    .bar:hover .track{background:#2C2C32}
+    .bar:hover .knob{transform:translateX(-5.5px) scale(1.2)}
     .bar .knob{transition:transform .1s ease}
-    #ghostBtn:hover{background:#1f1f34}
+    .zoombar button:hover{background:var(--hilite)}
+    #ghostBtn:hover{background:var(--hilite)}
   }
-  /* 键盘快捷键提示：只在桌面端显示 */
-  .keys{display:none;font-size:11px;color:#5a5a78}
-  @media (min-width:900px){ .keys{display:inline} }
 </style>
 </head>
 <body>
 <header>
+  <span class="k hide-sm">REPLAY // 逐笔绘制</span>
+  <span class="sep hide-sm">|</span>
   <h1>__TITLE__</h1>
-  <div class="n">__NSTR__ 笔 · Canvas 回放</div>
+  <div class="n">__NSTR__ 笔 · 回放</div>
+  <div class="rec live"><i></i>REC</div>
 </header>
 
 <div class="stage">
@@ -409,6 +453,14 @@ TEMPLATE = r'''<!DOCTYPE html>
       <div id="ghost"></div>
       <div id="split"></div>
     </div>
+    <!-- 取景器装饰：网格 + 十字准星 + 四角括号 + DRAWING 角标。
+         全部 pointer-events:none，不挡任何操作。 -->
+    <div class="reticle grid" aria-hidden="true"></div>
+    <div class="reticle" aria-hidden="true">
+      <div class="h"></div><div class="v"></div><div class="cross"></div>
+    </div>
+    <div class="corners" aria-hidden="true"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
+    <div class="badge" aria-hidden="true"><i></i>DRAWING</div>
     <div id="toast">绘制中…</div>
   </div>
   <div id="side"><div id="sideView"></div><div class="tag">原图</div></div>
@@ -598,13 +650,18 @@ function step(ts){
     var a=Math.floor(cur), b=Math.floor(target);
     paintRange(a,b); cur=target; syncUI();
   }
-  if(timePos>=1){ playing=false; playBtn.textContent="↺ 重播"; playBtn.classList.remove("on"); syncUI(); return; }
+  if(timePos>=1){
+    playing=false; playBtn.textContent="↺ 重播"; playBtn.classList.remove("on");
+    document.body.classList.add("done");   // 取景器角标由红转绿：画完了
+    syncUI(); return;
+  }
   raf=requestAnimationFrame(step);
 }
 function play(){
   if(playing) return;
   if(cur>=N-0.5){ clearAll(); cur=0; timePos=0; syncUI(); }
   playing=true; last=0; playBtn.textContent="❚❚ 暂停"; playBtn.classList.add("on");
+  document.body.classList.remove("done");
   raf=requestAnimationFrame(step);
 }
 function pause(){ playing=false; if(raf) cancelAnimationFrame(raf); playBtn.textContent="▶ 播放"; playBtn.classList.remove("on"); }
@@ -612,6 +669,7 @@ playBtn.addEventListener("click",function(){ playing?pause():play(); });
 
 document.getElementById("reset").addEventListener("click",function(){
   pause(); clearAll(); cur=0; timePos=0; syncUI(); playBtn.textContent="▶ 播放";
+  document.body.classList.remove("done");
 });
 
 var toastEl=document.getElementById("toast");
