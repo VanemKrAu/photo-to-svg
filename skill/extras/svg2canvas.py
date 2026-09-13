@@ -704,9 +704,16 @@ function layout(){
   if(dual){
     sideEl.style.display="block";
     vw=(aw-GAP)/2;                          /* 左栏（视口）可用宽度 */
+    /* 双栏模式：右栏已经是完整的原图 —— 左栏就别再叠「半张原图 + 分界线」了，
+       否则进来先看到「一半绘制一半原图」，还得手动拖分界线把它拉走 */
+    ghostEl.style.display="none";
+    splitEl.style.display="none";
   }else{
     sideEl.style.display="none";
     vw=aw;
+    /* 单栏：恢复对照层（开着的话）*/
+    ghostEl.style.display=ghostOn?"block":"none";
+    splitEl.style.display=ghostOn?"block":"none";
   }
   /* 视口尺寸由 CSS 撑满，这里只算「图片的适配尺寸」并把它居中 */
   var s=Math.min(vw/W, ah/H);
