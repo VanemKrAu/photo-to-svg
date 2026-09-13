@@ -691,9 +691,19 @@
 
   /* ---------- 历史里的旧回放页：布局升级（2026-09「相册式」缩放） ----------
      旧版把视口做成了贴着图片的小框（放大只能在框里裁剪、缩放条压住画面）。
-     这套规则把它换成新布局：全部命中才应用，任何一处对不上就整体放弃
-     （页面保持原样，绝不会出现「半新半旧」）。规则来自 0f648ca 前后的模板对比，
-     含作品参数的几处（canvas 尺寸、W/H）用正则。 */
+     这套规则把它换成新布局。规则来自 0f648ca 前后的模板对比，
+     含作品参数的几处（canvas 尺寸、W/H）用正则。
+
+     **逐条独立应用，不再是「全中才生效」**（2026-09-15 修）：规则是按世代累积的
+     —— 第 0 条针对最早那批页面、最后几条针对最新那批 —— 而用户的历史记录横跨
+     好几个世代。原先要求全部命中、任何一处对不上就整体放弃，等于「只要不是从
+     最老版本一路升上来的页面，就一条都别想升」：实测 0a7cbbc / 83dbe13 / ea3acd6
+     三个世代的产物**全部卡在第 0 条**（它们早就没有「首帧兜底尺寸」那段注释了），
+     于是 #sideView、指针捕获、双栏隐藏对照层这些修复一条都没轮到，
+     历史预览里的老毛病原样存在（用户报「修完了网站上还是有问题」就是这个）。
+     现在每条规则自己判定：命中就替换、命中不了就跳过（顺序仍然保留 —— 后面的
+     规则依赖前面的输出）。每条规则的 from/re 都覆盖一整段完整代码块，
+     所以「只中一半」不会把页面改坏。 */
   const LAYOUT_RULES = [
     { re: /  \/\* 首帧兜底尺寸[\s\S]{0,400}?touch-action:none\}/,
       to: `  /* .frame 是「视口」：撑满整个可用区域，图片按适配尺寸居中显示。
@@ -807,6 +817,33 @@
   if(dual){ sideEl.style.width=fitW+"px"; sideEl.style.height=fitH+"px"; }
   clampPan();
   applyView();` },
+    /* 「相册式布局已就位、但还早于双栏隐藏对照层那一版（0bcafd4）」的页面 ——
+       这正是用户历史记录里最常见的一批（0a7cbbc / 83dbe13 / ea3acd6 都属此列）。
+       上面那条规则只在**老布局**（var cell=(aw-GAP)/2）上生效，这批页面匹配不到，
+       于是它们永远拿不到「双栏别再叠半张原图 + 分界线」这个修复 ——
+       这也是用户说「修完了网站上还是有问题」的来源之一。这条专门补它。 */
+    { from: `  var dual=sideMode(), GAP=14, vw;
+  if(dual){
+    sideEl.style.display="block";
+    vw=(aw-GAP)/2;                          /* 左栏（视口）可用宽度 */
+  }else{
+    sideEl.style.display="none";
+    vw=aw;
+  }`,
+      to: `  var dual=sideMode(), GAP=14, vw;
+  if(dual){
+    sideEl.style.display="block";
+    vw=(aw-GAP)/2;                          /* 左栏（视口）可用宽度 */
+    /* 双栏模式：右栏已是完整原图，左栏别再叠「半张原图 + 分界线」 */
+    ghostEl.style.display="none";
+    splitEl.style.display="none";
+  }else{
+    sideEl.style.display="none";
+    vw=aw;
+    /* 单栏：恢复对照层（开着的话）*/
+    ghostEl.style.display=ghostOn?"block":"none";
+    splitEl.style.display=ghostOn?"block":"none";
+  }` },
     { from: `  CV.style.transformOrigin = "0 0";
   CV.style.transform = "translate(" + zoom.tx + "px," + zoom.ty + "px) scale(" + zoom.s + ")";`,
       to: `  var fw=frame.clientWidth, fh=frame.clientHeight;
@@ -1007,18 +1044,67 @@ document.getElementById("full").addEventListener("click",toggleFull);
 document.getElementById("fsExit").addEventListener("click",toggleFull);` },
   ];
 
+  /* 每条规则自带「已经打过了吗」的判断：把 to 里最长的一段「不含 $n」的连续
+     文本当哨兵，输出里已经有它就跳过这条。
+     为什么必须有：规则的 from 并不总能唯一标识「旧状态」—— 比如「给 footer
+     后面补 #fsExit 按钮」这条，from 就是 </footer>（新版页面里也在），
+     逐条独立跑就会给已经补过的页面再插一个按钮、把 var fitW 声明插两遍。
+     原先靠「全中才应用」侥幸避开了这个问题，代价是几乎升不动任何历史页面。 */
+  /* 「这条规则是不是已经打过了」——把 to 里相对 from 新增的**代码行**按连续段切块
+     （注释行不计：规则里的注释常是手写简写版，和模板里的详细注释对不上，
+      拿带注释的整段去比对必然失配，于是重复插入），每个块都在输出里找得到才算打过。
+
+     为什么不能用单个哨兵串：短的一行代码在文档别处也会出现 ——
+     ghostEl.style.display=ghostOn?"block":"none"; 在「对照」按钮的点击处理里就有，
+     拿它当哨兵会把「还没打过的页面」误判成「打过了」，双栏隐藏对照层这种修复就永远加不上。
+     反过来也不能「任意一块命中就算打过」：旧页面可能碰巧包含其中一块。
+     所以：候选块**全部**命中才算打过。 */
+  function newBlocks(r){
+    if(r.sentinel) return [r.sentinel];
+    const toLines = String(r.to).split('\n');
+    const fromTrim = new Set((r.re ? '' : String(r.from))
+      .split('\n').map(s => s.trim()).filter(Boolean));
+    /* 只按行首判断是不是注释行：行尾挂注释的代码行（var fitW=0, fitH=0; 加一段块注释）
+       是货真价实的代码，不能连它一起排除 —— 排掉之后这条规则就认不出自己已经打过了 */
+    const isComment = (t) => !t || t.startsWith('/*') || t.startsWith('*') || t.startsWith('//');
+    const blocks = [];
+    let cur = [];
+    for(const ln of toLines){
+      const t = ln.trim();
+      /* 收进块的是**原始行（含缩进）**：块最终要拿去在未改动的原文里 indexOf，
+         带着缩进才找得到。这里踩过坑 —— 曾经 push 的是 trim 过的行，
+         结果哨兵永远匹配不上，「已经打过」恒为 false，同一条规则被反复应用。 */
+      if(t && !isComment(t) && !fromTrim.has(t) && !/\$\d/.test(t)) cur.push(ln);
+      else { if(cur.length) blocks.push(cur.join('\n')); cur = []; }
+    }
+    if(cur.length) blocks.push(cur.join('\n'));
+    let res = blocks.filter(b => b.trim().length >= 20);
+    /* 兜底：正则规则的 to 常整行都带 $1/$2，退回「不含 $n 的长片段」 */
+    if(!res.length){
+      res = String(r.to).split(/\$\d+/)
+        .map(s => s.replace(/^\n+/, '').replace(/\n+$/, ''))
+        .filter(s => s.trim().length >= 20 && !fromTrim.has(s.trim()) && !isComment(s.trim()));
+    }
+    return res;
+  }
+  function alreadyApplied(out, r){
+    const blocks = newBlocks(r);
+    return blocks.length > 0 && blocks.every(b => out.indexOf(b) >= 0);
+  }
+
   function upgradeLayout(text){
-    let out = text;
+    let out = text, hit = 0;
     for(const r of LAYOUT_RULES){
+      if(alreadyApplied(out, r)) continue;            // 这条的效果已经在了，别重复打
       if(r.re){
-        if(!r.re.test(out)) return null;
-        out = out.replace(r.re, r.to);
+        if(!r.re.test(out)) continue;                 // 这条对不上：跳过，不放弃整轮
+        out = out.replace(r.re, r.to); hit++;
       }else{
-        if(out.split(r.from).length !== 2) return null;   // 必须恰好命中一处
-        out = out.replace(r.from, r.to);
+        if(out.split(r.from).length !== 2) continue;   // 必须恰好命中一处，否则跳过
+        out = out.replace(r.from, r.to); hit++;
       }
     }
-    return out;
+    return hit ? out : null;
   }
 
   /* 底板色修复（2026-09-14）：早期回放页把底板写死成浅灰（#f0f0f0），
@@ -1046,6 +1132,11 @@ document.getElementById("fsExit").addEventListener("click",toggleFull);` },
     let text;
     try{ text = await rec.html.text(); }catch(_){ return rec.html; }
     rec._axisDone = true;
+    /* 行尾先归一化：网页版（Pyodide）写出的回放页是 LF，但本机 Windows 命令行跑
+       make_art.py 时 Python 文本模式会把每个 \n 写成 \r\n，而下面的规则和
+       AXIS_OLD / AXIS_NEW 文本都是 LF —— 不归一化，本机生成的历史记录一条都命中不了。
+       HTML 不在乎行尾，改掉没有副作用。 */
+    if(text.indexOf("\r\n") >= 0) text = text.replace(/\r\n/g, "\n");
     let out = text, changed = false;
     /* ① 时间轴升级（2026-09-12）：线稿从「固定 15%」改成按视觉重量自然播 */
     if(out.indexOf("Math.sqrt(AREA[i])") >= 0){
