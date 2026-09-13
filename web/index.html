@@ -415,9 +415,10 @@ footer.hist.collapsed .hist-head{margin-bottom:0}
   }
   /* 窄屏是整页滚动，参数区不该再自己滚一层（否则手机上会出现「滚动套滚动」） */
   .rail-top{overflow:visible}
-  /* 舞台要够高：预览区里装的是整个回放页（它自己的 HUD 40 + 底栏 87 都算在内），
-     62vh 时手机上作品只剩两百来像素宽。78vh 让小屏竖图也能铺满预览的宽度。 */
-  section.stage{min-height:78vh}
+  /* 舞台要够高：预览框里装的是整个回放页（它自己的顶栏 40 + 底栏 87 都算在内），
+     矮了就会出现「高度不够 → 画面按高度缩 → 左右露白」。86vh 让常见竖屏
+     也能把画面顶满预览框的宽度。 */
+  section.stage{min-height:86vh}
   .canvas-area{padding:10px}
   .hud{padding:0 14px;gap:10px}
   .hud .v.hide-sm{display:none}  .brand .sub{display:none}
@@ -804,7 +805,8 @@ function show(f){
     const w = im.naturalWidth, h = im.naturalHeight;
     $('srcDims').textContent = w + ' × ' + h + ' · ' + fmtSize(f.size);
     setHud(undefined, 'SOURCE ' + w + '×' + h, 'CANVAS ' + w + ' PT');
-    canvasAR = w / h;          // 只作记录；预览尺寸由回放页自己算，宿主不再缩
+    canvasAR = w / h;          // 预览框跟着这张图的比例走
+    sizePreviewSlot();
   };
   im.src = url;
   // 左栏源图卡：把占位换成缩略图
@@ -864,7 +866,8 @@ function showEmpty(){
   // 把旧回放页卸掉：否则它在看不见的地方继续跑 rAF + 250ms 定时器，白烧 CPU
   frame.removeAttribute('srcdoc');
   currentRecId = null;              // 舞台上已经没东西了，别再把它当成「当前记录」
-  canvasAR = 0;
+  canvasAR = 0;                     // 回到「还没有产物」
+  sizePreviewSlot();
   /* 三个链接的 href 也要摘掉。删单条 / 清空历史会把对应记录的 objectURL revoke 掉，
      留着 href 就是一个指向失效 blob 的死链（.off 只挡鼠标，右键复制链接照样能拿到）。 */
   ['openHtml','dlSvg','dlHtml'].forEach((id) => { $(id).removeAttribute('href'); });
@@ -875,14 +878,44 @@ function showViewport(isReplay){
   viewport.style.display = '';
   $('thumb').style.display = isReplay ? 'none' : 'block';
   frame.style.display = isReplay ? 'block' : 'none';
+  sizePreviewSlot();
 }
-/* ★ 这里原本有个 sizePreviewSlot()，按作品宽高比把 .slot 缩成一个等比盒子。
-   它与回放页内部的 layout() 重复：iframe 里的 stage/view 本来就是「按可用空间
-   等比缩放并居中」，宿主再缩一次就成了双重缩放，于是桌面 1026px 的可用区里
-   只画出一张 510px 宽的浅灰卡片，左右各留 258px 空白。
-   现在整条尺寸逻辑撤掉，.slot 恒为 100%×100%，适配只由回放页自己做。
-   canvasAR 仍然记录作品比例，供 HUD / 导出等处使用。 */
-let canvasAR = 0;                       // 作品的宽高比（仅记录，不再参与预览尺寸计算）
+/* ★ 预览框的宽高比必须等于作品的宽高比，否则回放页里那张图只能在中间占一条、
+   左右（或上下）露出底色 —— 这正是「两边有空白」的根源。
+   但框里装的是整个回放页而不只是画面：它自己的顶栏 40 + 底栏 87 = 127 会吃掉高度，
+   所以「画面可用高」要减掉这 127，框高再加回来。
+   于是 .stage 恰好等于作品比例，画面顶满框，一点空白都不剩。 */
+let canvasAR = 0;                       // 作品的宽高比
+const CHROME_FALLBACK = 127;            // 回放页顶栏 40 + 底栏 87（实测恒定）
+function previewChromeH(){
+  /* 优先从 iframe 里实测：底栏会随宽度换行，硬编码不是长久之计。
+     拿不到（还没加载完 / 跨域）就退回实测值。 */
+  try{
+    const d = frame.contentDocument;
+    if(!d || !d.body) return CHROME_FALLBACK;
+    const hd = d.querySelector('header'), ft = d.querySelector('footer');
+    if(!hd && !ft) return CHROME_FALLBACK;
+    const h = (hd ? hd.getBoundingClientRect().height : 40) + (ft ? ft.getBoundingClientRect().height : 87);
+    return h > 20 ? Math.round(h) : CHROME_FALLBACK;
+  }catch(e){ return CHROME_FALLBACK; }
+}
+function sizePreviewSlot(){
+  const area = document.querySelector('.canvas-area');
+  const slot = $('slot');
+  if(!area || !slot) return;
+  if(!canvasAR){ slot.style.width = ''; slot.style.height = ''; return; }
+  const cs = getComputedStyle(area);
+  const availW = Math.max(120, area.clientWidth  - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
+  const availH = Math.max(120, area.clientHeight - parseFloat(cs.paddingTop)  - parseFloat(cs.paddingBottom));
+  const chrome = Math.min(previewChromeH(), Math.round(availH * 0.5));   // 极矮屏兜底，别把画面挤没
+  const hImg = Math.max(60, Math.min(availW / canvasAR, availH - chrome));
+  const wImg = hImg * canvasAR;
+  slot.style.width  = Math.round(wImg) + 'px';
+  slot.style.height = Math.round(hImg + chrome) + 'px';
+}
+/* 回放页底栏在窄屏会换行、高度会变，而宿主量的是「加载完成那一刻」的值。
+   所以在 iframe 每次载入后再量一次，把框重新对齐。 */
+if(frame) frame.addEventListener('load', () => { setTimeout(sizePreviewSlot, 60); });
 /* 只留下载入口这三个链接要跟着可用状态走。
    播放 / 倍速 / 缩放 / 对照都归回放页自己的工具栏管，宿主不再插手。 */
 function setToolsEnabled(on){
@@ -1762,8 +1795,12 @@ document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fit
    只在几个固定时机调用是不够的：生成完成时历史区会折叠、舞台高度瞬间变大，
    而那次调用发生在折叠之前，于是拿的是旧高度（预览框因此偏扁）；
    窗口 resize、侧栏重排同理。交给 ResizeObserver 最稳。 */
-/* 这里原本挂了一个 ResizeObserver 去重算 .slot 的等比尺寸。
-   尺寸逻辑撤掉后它没有意义了：.slot 恒为 100%，容器怎么变它自己就跟着变。 */
+/* 可用区尺寸一变（历史栏收起、窗口缩放、手机旋转）就要重算预览框，
+   否则框还停在旧比例上，画面又会露出空白。 */
+if(window.ResizeObserver){
+  const area = document.querySelector('.canvas-area');
+  if(area) new ResizeObserver(() => sizePreviewSlot()).observe(area);
+}
 
 /* ---------------- 渲染历史 ---------------- */
 async function renderHistory(){
@@ -2641,6 +2678,7 @@ $('hClear').addEventListener('click', async () => {
 
 /* 窗口尺寸变化时重算底部控制条的比例显示。四角括号和网格都是绝对定位的纯 CSS，
    不需要 JS 参与 —— 原来的注释写「保持角标和网格在位」，与实际做的事不符。 */
+window.addEventListener('resize', () => { sizePreviewSlot(); });
 
 /* ---------------- 启动 ---------------- */
 (async () => {
