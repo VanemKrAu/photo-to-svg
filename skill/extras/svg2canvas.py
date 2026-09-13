@@ -208,13 +208,17 @@ def build_lineart(photo, W, H, dark=0.78, seg_pts=16, min_pts=8, approx=1.0):
     # 线稿筛选：既看长度，也看「这条线画在哪」——
     # 皮肤/高光上的短碎线是照片纹理（噪点、眼妆过渡），不是结构轮廓，
     # 画出来就是脸上一道道脏线（用户 2026-09-14 报「脸上有黑色斑纹」）。
-    # 判据：链上偏亮（>150）的点占比超过 0.6 → 丢弃。
-    luma = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    #
+    # 判据用「链的平均亮度」而不是「亮点占比」：真结构线总有一侧是暗的
+    # （头发边、轮廓线，平均亮度低），而纯皮肤上的纹理线两侧都亮。
+    # 实测（用户原图）：阈值 110 时链 530→329（保留 62% 结构线），
+    # 画在亮区的比例 25%→9%；用「亮点占比」判据则会把亮皮肤上的
+    # 轮廓线一起误伤（用户反馈「线稿变淡了」）。
+    luma = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(int)   # int：防 uint8 累加溢出
     def keep(c):
         if len(c) < min_pts:
             return False
-        bright = sum(1 for (x, y) in c if luma[y, x] > 150)
-        return bright / len(c) < 0.6
+        return sum(luma[y, x] for (x, y) in c) / len(c) <= 110
 
     chains = []
     for p0 in ends:
