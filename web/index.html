@@ -259,11 +259,10 @@
      同一文档访问 blob，所有浏览器都稳 */
   #preview{position:fixed;inset:0;z-index:999;display:none;flex-direction:column;background:#060608}
   #preview.on{display:flex}
-  .pv-bar{display:flex;align-items:center;gap:12px;padding:10px 14px;
-    border-bottom:1px solid var(--line);
+  /* 顶栏只放「关闭」——作品名交给回放页自己的标题栏显示，避免出现两个标题 */
+  .pv-bar{display:flex;align-items:center;justify-content:flex-end;
+    padding:7px 12px;border-bottom:1px solid var(--line);
     background:linear-gradient(180deg,rgba(20,20,34,.95),rgba(13,13,22,.75))}
-  .pv-title{flex:1 1 auto;min-width:0;font-size:13px;font-weight:600;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #pvClose{font:inherit;font-size:12.5px;color:#e8c97a;background:transparent;
     border:1px solid #6b5416;border-radius:7px;padding:5px 12px;cursor:pointer;flex:0 0 auto;
     -webkit-tap-highlight-color:transparent}
@@ -441,7 +440,6 @@
      同一文档访问 blob，所有浏览器都稳，桌面端也少开一个标签页 -->
 <div id="preview">
   <div class="pv-bar">
-    <span class="pv-title" id="pvTitle">回放预览</span>
     <button id="pvClose" type="button">✕ 关闭</button>
   </div>
   <iframe id="pvFrame" title="回放预览"></iframe>
@@ -540,8 +538,8 @@
    * Android WebView（VIA 等调用系统内核的浏览器）打开新标签页会得到
    * 空白页（Chrome 自带完整内核所以没事）。页面内 iframe 属于同一文档，
    * blob 一定有效；桌面端也顺便少开一个标签页。 */
-  function openPreview(htmlText, title){
-    $('pvTitle').textContent = title || '回放预览';
+  function openPreview(htmlText){
+    /* 不在这里显示作品名 —— 回放页自带标题栏，重复会显得乱 */
     /* 用 srcdoc 注入、而不是 blob URL：Android WebView（VIA 等调用系统内核的
        浏览器）默认拦掉 blob: 协议 —— 新标签页和 iframe 都会得到空白页；
        srcdoc 是纯 DOM 注入、不经过 URL 加载，所有浏览器都认。 */
@@ -562,7 +560,7 @@
   /* 结果卡的「预览」：拦掉默认的新标签页行为，改走页面内全屏（srcdoc） */
   $('openHtml').addEventListener('click', function(e){
     e.preventDefault();
-    openPreview(lastHtmlText, $('title').value || '回放预览');
+    openPreview(lastHtmlText);
   });
 
   /* ---------- 历史（IndexedDB） ----------
@@ -958,7 +956,7 @@ frame.addEventListener("dblclick", function(e){
       };
       mk('▶ 预览', 'p', async () => {
         const html = await upgradeAxis(r);       // 旧记录会先升级时间轴与布局
-        openPreview(await html.text(), r.title || r.name);
+        openPreview(await html.text());
       }, '全屏预览回放页');
       mk('⬇ SVG', '', () => {
         const a = document.createElement('a');
