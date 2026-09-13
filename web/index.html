@@ -976,7 +976,12 @@ frame.addEventListener("dblclick", function(e){
   if(!ghostOn) return;
   if(e.buttons) setSplit(e.clientX);   /* 只在按住拖动时移动分界线 */
 });` },
-    { from: `  var r = frame.getBoundingClientRect();
+    /* 这条的 from 只是「左栏 wheel 那三行」，它要补的是右栏滚轮监听；
+       而右栏滚轮在共享版/独立版里写法完全不同，靠 to 的新增块认不出「已经补过」——
+       独立版页面会被它再插一段共享版监听（下面那条再改回独立版，看着结果对、
+       其实每跑一次都改写一次，幂等就废了）。所以显式指一个**两版都有**的哨兵。 */
+    { sentinel: 'sideEl.addEventListener("wheel", function(e){',
+      from: `  var r = frame.getBoundingClientRect();
   setZoomAt(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX - r.left, e.clientY - r.top);
 }, { passive:false });`,
       to: `  var r = frame.getBoundingClientRect();
@@ -1042,14 +1047,164 @@ function toggleFull(){
 }
 document.getElementById("full").addEventListener("click",toggleFull);
 document.getElementById("fsExit").addEventListener("click",toggleFull);` },
+    /* ---------- 2026-09-15：右栏改成「自己一套缩放 / 平移」 ----------
+       原先进双栏后两栏**共享同一个 zoom**：滚轮在哪边滚都是两张一起放大，
+       右栏还压根没绑拖动 —— 就是「拖原图拖不动、拖左栏时原图却跟着跑」。
+       这批规则把它拆成两套独立状态（鼠标落在哪一栏就只动哪一栏）。
+       老页面先被上面的规则升到「共享版」，再被这批改成「独立版」；
+       用共享版生成过的作品也直接命中。
+       每条都靠 alreadyApplied 判断是否已打过，重复跑不会二次插入。
+       **from 一律只取代码行、不带注释** —— 注释在不同世代被手写改写过
+       （共享版那批规则里的注释就和模板里的不一致），带上就匹配不上了。 */
+    { from: `  #side{display:none;position:relative;flex:0 0 auto;
+    box-shadow:0 10px 40px rgba(0,0,0,.8),0 0 0 1px var(--line);border-radius:5px;overflow:hidden}`,
+      to: `  #side{display:none;position:relative;flex:0 0 auto;touch-action:none;
+    box-shadow:0 10px 40px rgba(0,0,0,.8),0 0 0 1px var(--line);border-radius:5px;overflow:hidden}` },
+    { from: `var zoom = { s: 1, tx: 0, ty: 0 };`,
+      to: `var zoom = { s: 1, tx: 0, ty: 0 };
+/* 右栏（原图）自己的一套缩放/平移：两栏互不影响，鼠标落在哪一栏就只动哪一栏 */
+var zoom2 = { s: 1, tx: 0, ty: 0 };
+/* 最后交互的是哪一栏：底部 ± 按钮与键盘 +/- 作用于它 */
+var lastPane = "left";` },
+    { from: `  else if(e.key==="0"){ e.preventDefault(); pause(); resetView(); }
+  else if(e.key==="1"){ e.preventDefault(); pause(); setZoomAt(1/fitScale); }
+  else if(e.key==="+"||e.key==="="){ e.preventDefault(); pause(); setZoomAt(zoom.s*1.4); }
+  else if(e.key==="-"||e.key==="_"){ e.preventDefault(); pause(); setZoomAt(zoom.s/1.4); }`,
+      to: `  else if(e.key==="0"){ e.preventDefault(); pause(); resetView(); resetSide(); }
+  else if(e.key==="1"){ e.preventDefault(); pause(); setZoomAt(1/fitScale); setZoomAt2(1/fitScale); }
+  else if(e.key==="+"||e.key==="="){ e.preventDefault(); pause(); zoomBy(1.4); }
+  else if(e.key==="-"||e.key==="_"){ e.preventDefault(); pause(); zoomBy(1/1.4); }` },
+    { from: `  clampPan();
+  applyView();
+}
+window.addEventListener("resize",layout);`,
+      to: `  clampPan();
+  applyView();
+  clampPan2();
+  applySide();
+}
+window.addEventListener("resize",layout);` },
+    { from: `  if(SIDEVIEW){
+    SIDEVIEW.style.transformOrigin = "0 0";
+    SIDEVIEW.style.transform = "translate(" + zoom.tx + "px," + zoom.ty + "px) scale(" + zoom.s + ")";
+  }
+  var zl = document.getElementById("zLvl");
+  if(zl) zl.textContent = Math.round(zoom.s * 100) + "%";
+}`,
+      to: `  syncZoomLabel();
+}
+/* 底部那个百分比：跟随「最后一次操作的那一栏」 */
+function syncZoomLabel(){
+  var zl = document.getElementById("zLvl");
+  if(zl) zl.textContent = Math.round((lastPane==="right"?zoom2.s:zoom.s) * 100) + "%";
+}` },
+    { from: `  e.preventDefault();
+  pause();
+  var r = frame.getBoundingClientRect();`,
+      to: `  e.preventDefault();
+  pause(); lastPane="left";
+  var r = frame.getBoundingClientRect();` },
+    { from: `sideEl.addEventListener("wheel", function(e){
+  e.preventDefault();
+  pause();
+  var sr = SIDEVIEW.getBoundingClientRect();
+  var ax = (e.clientX - sr.left) + (frame.clientWidth  - fitW*zoom.s)/2;
+  var ay = (e.clientY - sr.top ) + (frame.clientHeight - fitH*zoom.s)/2;
+  setZoomAt(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), ax, ay);
+}, { passive:false });`,
+      to: `/* 右栏（原图）：自己的一套缩放 / 平移，跟左栏各走各的 */
+function applySide(){
+  if(!SIDEVIEW) return;
+  SIDEVIEW.style.transformOrigin = "0 0";
+  SIDEVIEW.style.transform = "translate(" + zoom2.tx + "px," + zoom2.ty + "px) scale(" + zoom2.s + ")";
+  syncZoomLabel();
+}
+function clampPan2(){
+  if(!SIDEVIEW) return;
+  var sw=sideEl.clientWidth, sh=sideEl.clientHeight;
+  var mx=Math.max(0,(fitW*zoom2.s-sw)/2), my=Math.max(0,(fitH*zoom2.s-sh)/2);
+  zoom2.tx = Math.max(-mx, Math.min(mx, zoom2.tx));
+  zoom2.ty = Math.max(-my, Math.min(my, zoom2.ty));
+}
+function setZoomAt2(ns, cx, cy){
+  ns = Math.min(24, Math.max(1, ns));
+  if(cx === undefined){ cx = sideEl.clientWidth/2; cy = sideEl.clientHeight/2; }
+  var k = ns / zoom2.s;
+  zoom2.tx = cx - (cx - zoom2.tx)*k;
+  zoom2.ty = cy - (cy - zoom2.ty)*k;
+  zoom2.s = ns;
+  clampPan2(); applySide();
+}
+function resetSide(){ zoom2.s=1; zoom2.tx=0; zoom2.ty=0; applySide(); }
+sideEl.addEventListener("wheel", function(e){
+  e.preventDefault();
+  pause(); lastPane="right";
+  var r = sideEl.getBoundingClientRect();
+  setZoomAt2(zoom2.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX - r.left, e.clientY - r.top);
+}, { passive:false });
+/* 右栏的双指捏合 / 放大后单指拖动 —— 只动右栏 */
+var ptrs2 = {}, pinch2 = null, pan2 = null;
+sideEl.addEventListener("pointerdown", function(e){
+  lastPane="right";
+  ptrs2[e.pointerId] = { x:e.clientX, y:e.clientY };
+  try{ sideEl.setPointerCapture(e.pointerId); }catch(_){}
+  var ids = Object.keys(ptrs2);
+  if(ids.length === 2){
+    var a = ptrs2[ids[0]], b = ptrs2[ids[1]];
+    var r = sideEl.getBoundingClientRect();
+    pinch2 = { d:Math.hypot(a.x-b.x, a.y-b.y), s:zoom2.s,
+               cx:(a.x+b.x)/2 - r.left, cy:(a.y+b.y)/2 - r.top };
+    pan2 = null;
+  } else if(zoom2.s > 1.0001){
+    pan2 = { x:e.clientX, y:e.clientY, tx:zoom2.tx, ty:zoom2.ty };
+  }
+});
+sideEl.addEventListener("pointermove", function(e){
+  if(!ptrs2[e.pointerId]) return;
+  ptrs2[e.pointerId] = { x:e.clientX, y:e.clientY };
+  var ids = Object.keys(ptrs2);
+  if(pinch2 && ids.length >= 2){
+    e.preventDefault();
+    var a = ptrs2[ids[0]], b = ptrs2[ids[1]];
+    var d = Math.hypot(a.x-b.x, a.y-b.y);
+    if(d > 0) setZoomAt2(pinch2.s * (d/pinch2.d), pinch2.cx, pinch2.cy);
+  } else if(pan2){
+    e.preventDefault();
+    zoom2.tx = pan2.tx + (e.clientX - pan2.x);
+    zoom2.ty = pan2.ty + (e.clientY - pan2.y);
+    clampPan2(); applySide();
+  }
+}, { passive:false });
+function endPtr2(e){
+  delete ptrs2[e.pointerId];
+  if(Object.keys(ptrs2).length < 2) pinch2 = null;
+  if(Object.keys(ptrs2).length === 0) pan2 = null;
+}
+sideEl.addEventListener("pointerup", endPtr2);
+sideEl.addEventListener("pointercancel", endPtr2);` },
+    /* 这条的新增代码只有一行 lastPane="left";（16 字符），短到不足以当哨兵，
+       显式指一个更长的特征串，否则它会认不出自己已经打过、反复插同一行。 */
+    { sentinel: 'frame.addEventListener("pointerdown", function(e){\n  lastPane="left";',
+      from: `frame.addEventListener("pointerdown", function(e){
+  ptrs[e.pointerId] = { x:e.clientX, y:e.clientY };`,
+      to: `frame.addEventListener("pointerdown", function(e){
+  lastPane="left";
+  ptrs[e.pointerId] = { x:e.clientX, y:e.clientY };` },
+    { from: `document.getElementById("zIn").onclick  = function(){ pause(); setZoomAt(zoom.s * 1.4); };
+document.getElementById("zOut").onclick = function(){ pause(); setZoomAt(zoom.s / 1.4); };
+document.getElementById("zFit").onclick = function(){ pause(); resetView(); };
+document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fitScale); };`,
+      to: `/* ± 作用于「最后操作的那一栏」；⤢ 与 1:1 是全局动作，两栏一起归位 */
+function zoomBy(k){
+  if(lastPane==="right") setZoomAt2(zoom2.s * k);
+  else setZoomAt(zoom.s * k);
+}
+document.getElementById("zIn").onclick  = function(){ pause(); zoomBy(1.4); };
+document.getElementById("zOut").onclick = function(){ pause(); zoomBy(1 / 1.4); };
+document.getElementById("zFit").onclick = function(){ pause(); resetView(); resetSide(); };
+document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fitScale); setZoomAt2(1 / fitScale); };` },
   ];
 
-  /* 每条规则自带「已经打过了吗」的判断：把 to 里最长的一段「不含 $n」的连续
-     文本当哨兵，输出里已经有它就跳过这条。
-     为什么必须有：规则的 from 并不总能唯一标识「旧状态」—— 比如「给 footer
-     后面补 #fsExit 按钮」这条，from 就是 </footer>（新版页面里也在），
-     逐条独立跑就会给已经补过的页面再插一个按钮、把 var fitW 声明插两遍。
-     原先靠「全中才应用」侥幸避开了这个问题，代价是几乎升不动任何历史页面。 */
   /* 「这条规则是不是已经打过了」——把 to 里相对 from 新增的**代码行**按连续段切块
      （注释行不计：规则里的注释常是手写简写版，和模板里的详细注释对不上，
       拿带注释的整段去比对必然失配，于是重复插入），每个块都在输出里找得到才算打过。

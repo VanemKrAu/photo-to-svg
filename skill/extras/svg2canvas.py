@@ -283,10 +283,11 @@ TEMPLATE = r'''<!DOCTYPE html>
   canvas{display:block;width:100%;height:100%;background:__BG__}
   #ghost{position:absolute;inset:0;background-image:var(--ghostimg);background-size:100% 100%;
     background-repeat:no-repeat;clip-path:inset(0 0 0 50%);pointer-events:none}
-  /* 宽屏并排栏：只显示跟当前帧同步的原图块。
-     里面放一个和左栏 .view 同款的可变换层（#sideView），
-     缩放/平移与左栏完全同步 —— 滚轮在哪一边都能缩放，两边永远看同一区域 */
-  #side{display:none;position:relative;flex:0 0 auto;
+  /* 宽屏并排栏：右栏显示原图。里面放一个和左栏 .view 同款的可变换层（#sideView），
+     但它有**自己的一套缩放/平移** —— 滚轮 / 拖动落在哪一栏上就只动哪一栏，
+     方便把原图单独放大看细节，不会把左边正在绘制的那张也一起带走。
+     touch-action:none 是给触屏用的：否则单指拖动会被浏览器当成滚动手势吃掉。 */
+  #side{display:none;position:relative;flex:0 0 auto;touch-action:none;
     box-shadow:0 10px 40px rgba(0,0,0,.8),0 0 0 1px var(--line);border-radius:5px;overflow:hidden}
   #sideView{position:absolute;left:0;top:0;will-change:transform;
     background-image:var(--ghostimg);background-size:100% 100%;background-repeat:no-repeat}
@@ -450,6 +451,14 @@ var fitW=0, fitH=0;                     /* 图片的「适配尺寸」：显示�
 /* 缩放状态。必须在这里就定义：下面的 layout() 会立即执行并读它。 */
 var fitScale = 1;                       /* 适应窗口时 1 画布像素 = fitScale 屏幕像素 */
 var zoom = { s: 1, tx: 0, ty: 0 };
+/* 右栏（原图）**自己的一套**缩放/平移 —— 两栏互不影响：滚轮 / 拖动落在哪一栏上
+   就只动哪一栏。想单独把原图放大看细节时，不会把左边正在绘制的那张一起带走。
+   右栏坐标系比左栏简单：它没有「居中基准」，#side 的尺寸就是图片的适配尺寸，
+   所以图片左上角就是 (0,0)，直接和 zoom2.tx/ty 对应。
+   （声明必须在这——下面的 layout() 会立即执行并读到它。） */
+var zoom2 = { s: 1, tx: 0, ty: 0 };
+/* 最后一次交互的是哪一栏：底部 ± 按钮、键盘 +/- 作用于它，百分比也显示它 */
+var lastPane = "left";
 
 var DEC=__DEC__;                       /* 顶点解码因子：顶点值 × DEC = 画布坐标 */
 var ctx=CV.getContext("2d",{alpha:false});
@@ -688,10 +697,10 @@ document.addEventListener("keydown",function(e){
   else if(e.key==="Home"){ e.preventDefault(); pause(); seekTo(0); }
   else if(e.key==="End"){ e.preventDefault(); pause(); seekTo(N); }
   else if(e.key==="f"||e.key==="F"){ e.preventDefault(); toggleFull(); }
-  else if(e.key==="0"){ e.preventDefault(); pause(); resetView(); }
-  else if(e.key==="1"){ e.preventDefault(); pause(); setZoomAt(1/fitScale); }
-  else if(e.key==="+"||e.key==="="){ e.preventDefault(); pause(); setZoomAt(zoom.s*1.4); }
-  else if(e.key==="-"||e.key==="_"){ e.preventDefault(); pause(); setZoomAt(zoom.s/1.4); }
+  else if(e.key==="0"){ e.preventDefault(); pause(); resetView(); resetSide(); }
+  else if(e.key==="1"){ e.preventDefault(); pause(); setZoomAt(1/fitScale); setZoomAt2(1/fitScale); }
+  else if(e.key==="+"||e.key==="="){ e.preventDefault(); pause(); zoomBy(1.4); }
+  else if(e.key==="-"||e.key==="_"){ e.preventDefault(); pause(); zoomBy(1/1.4); }
 });
 
 /* ---- 精确布局：按可用空间等比缩放画框（不依赖 aspect-ratio 的浏览器实现） ---- */
@@ -731,6 +740,10 @@ function layout(){
   }
   clampPan();
   applyView();
+  /* 右栏尺寸跟着一起变了：它的平移范围要重算、transform 也要重新贴上去
+     （两栏状态各自独立，这里必须分开处理） */
+  clampPan2();
+  applySide();
 }
 window.addEventListener("resize",layout);
 window.addEventListener("orientationchange",function(){ setTimeout(layout,120); });
@@ -749,14 +762,12 @@ function applyView(){
   var bx=(fw-fitW*zoom.s)/2+zoom.tx, by=(fh-fitH*zoom.s)/2+zoom.ty;
   VIEW.style.transformOrigin = "0 0";
   VIEW.style.transform = "translate(" + bx + "px," + by + "px) scale(" + zoom.s + ")";
-  /* 右栏原图用同一套缩放/平移 —— 但它没有「居中基准」（窗口就是整图），
-     所以直接用 zoom.tx/ty，不加 frame 的居中偏移。两边永远看同一区域。 */
-  if(SIDEVIEW){
-    SIDEVIEW.style.transformOrigin = "0 0";
-    SIDEVIEW.style.transform = "translate(" + zoom.tx + "px," + zoom.ty + "px) scale(" + zoom.s + ")";
-  }
+  syncZoomLabel();
+}
+/* 底部那个百分比：跟随「最后一次操作的那一栏」，不再固定绑在左栏上 */
+function syncZoomLabel(){
   var zl = document.getElementById("zLvl");
-  if(zl) zl.textContent = Math.round(zoom.s * 100) + "%";
+  if(zl) zl.textContent = Math.round((lastPane==="right"?zoom2.s:zoom.s) * 100) + "%";
 }
 /* 平移范围：图片比视口大时不许把边缘拖进视口；没占满的方向锁在居中 */
 function clampPan(){
@@ -783,29 +794,97 @@ function setZoomAt(ns, cx, cy){
 }
 function resetView(){ zoom.s = 1; zoom.tx = 0; zoom.ty = 0; applyView(); }
 
-/* 滚轮：以指针位置为锚点 */
+/* 滚轮：以指针位置为锚点。落点在哪一栏就动哪一栏（lastPane 供底部 ± 按钮与键盘用） */
 frame.addEventListener("wheel", function(e){
   e.preventDefault();
-  pause();
+  pause(); lastPane="left";
   var r = frame.getBoundingClientRect();
   setZoomAt(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX - r.left, e.clientY - r.top);
 }, { passive:false });
 
-/* 右栏（原图）也能滚轮缩放：和左栏共享同一套缩放/平移状态，两边永远看同一区域。
-   锚点要做一次换算 —— 右栏没有「居中基准」（窗口就是图），
-   把「相对右栏的坐标」加回 frame 的居中偏移，才是 setZoomAt 要的坐标系。 */
+/* ---------------- 右栏（原图）：自己的一套缩放 / 平移 ----------------
+   滚轮落在右栏就只缩右栏，拖动也只拖右栏，跟左栏各走各的。
+   原先两栏共用同一个 zoom —— 在哪儿滚都是两张一起放大；而且右栏压根没绑拖动，
+   于是「拖原图拖不动、拖左栏时原图却跟着跑」。 */
+function applySide(){
+  if(!SIDEVIEW) return;
+  SIDEVIEW.style.transformOrigin = "0 0";
+  SIDEVIEW.style.transform = "translate(" + zoom2.tx + "px," + zoom2.ty + "px) scale(" + zoom2.s + ")";
+  syncZoomLabel();
+}
+/* 右栏的平移范围：图片比它的框大时不许把边缘拖进框里（和左栏同一套规矩） */
+function clampPan2(){
+  if(!SIDEVIEW) return;
+  var sw=sideEl.clientWidth, sh=sideEl.clientHeight;
+  var mx=Math.max(0,(fitW*zoom2.s-sw)/2), my=Math.max(0,(fitH*zoom2.s-sh)/2);
+  zoom2.tx = Math.max(-mx, Math.min(mx, zoom2.tx));
+  zoom2.ty = Math.max(-my, Math.min(my, zoom2.ty));
+}
+/* 锚点 (cx,cy) 是「相对 #side 左上角」的坐标；不传就锚定右栏中心 */
+function setZoomAt2(ns, cx, cy){
+  ns = Math.min(24, Math.max(1, ns));
+  if(cx === undefined){ cx = sideEl.clientWidth/2; cy = sideEl.clientHeight/2; }
+  var k = ns / zoom2.s;
+  zoom2.tx = cx - (cx - zoom2.tx)*k;
+  zoom2.ty = cy - (cy - zoom2.ty)*k;
+  zoom2.s = ns;
+  clampPan2(); applySide();
+}
+function resetSide(){ zoom2.s=1; zoom2.tx=0; zoom2.ty=0; applySide(); }
+
 sideEl.addEventListener("wheel", function(e){
   e.preventDefault();
-  pause();
-  var sr = SIDEVIEW.getBoundingClientRect();
-  var ax = (e.clientX - sr.left) + (frame.clientWidth  - fitW*zoom.s)/2;
-  var ay = (e.clientY - sr.top ) + (frame.clientHeight - fitH*zoom.s)/2;
-  setZoomAt(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), ax, ay);
+  pause(); lastPane="right";
+  var r = sideEl.getBoundingClientRect();
+  setZoomAt2(zoom2.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX - r.left, e.clientY - r.top);
 }, { passive:false });
+
+/* 右栏的双指捏合 / 放大后单指拖动 —— 只动右栏 */
+var ptrs2 = {}, pinch2 = null, pan2 = null;
+sideEl.addEventListener("pointerdown", function(e){
+  lastPane="right";
+  ptrs2[e.pointerId] = { x:e.clientX, y:e.clientY };
+  /* 和左栏一样捕获指针：拖出右栏范围也能收到 pointerup，松手不会粘住 */
+  try{ sideEl.setPointerCapture(e.pointerId); }catch(_){}
+  var ids = Object.keys(ptrs2);
+  if(ids.length === 2){
+    var a = ptrs2[ids[0]], b = ptrs2[ids[1]];
+    var r = sideEl.getBoundingClientRect();
+    pinch2 = { d:Math.hypot(a.x-b.x, a.y-b.y), s:zoom2.s,
+               cx:(a.x+b.x)/2 - r.left, cy:(a.y+b.y)/2 - r.top };
+    pan2 = null;
+  } else if(zoom2.s > 1.0001){
+    pan2 = { x:e.clientX, y:e.clientY, tx:zoom2.tx, ty:zoom2.ty };
+  }
+});
+sideEl.addEventListener("pointermove", function(e){
+  if(!ptrs2[e.pointerId]) return;
+  ptrs2[e.pointerId] = { x:e.clientX, y:e.clientY };
+  var ids = Object.keys(ptrs2);
+  if(pinch2 && ids.length >= 2){
+    e.preventDefault();
+    var a = ptrs2[ids[0]], b = ptrs2[ids[1]];
+    var d = Math.hypot(a.x-b.x, a.y-b.y);
+    if(d > 0) setZoomAt2(pinch2.s * (d/pinch2.d), pinch2.cx, pinch2.cy);
+  } else if(pan2){
+    e.preventDefault();
+    zoom2.tx = pan2.tx + (e.clientX - pan2.x);
+    zoom2.ty = pan2.ty + (e.clientY - pan2.y);
+    clampPan2(); applySide();
+  }
+}, { passive:false });
+function endPtr2(e){
+  delete ptrs2[e.pointerId];
+  if(Object.keys(ptrs2).length < 2) pinch2 = null;
+  if(Object.keys(ptrs2).length === 0) pan2 = null;
+}
+sideEl.addEventListener("pointerup", endPtr2);
+sideEl.addEventListener("pointercancel", endPtr2);
 
 /* 触屏：双指捏合缩放、放大后单指拖动平移 */
 var ptrs = {}, pinch = null, pan = null;
 frame.addEventListener("pointerdown", function(e){
+  lastPane="left";
   ptrs[e.pointerId] = { x:e.clientX, y:e.clientY };
   try{ frame.setPointerCapture(e.pointerId); }catch(_){}
   /* 捕获指针：拖出画面范围也能收到 pointerup，避免「松手后画面还跟着鼠标跑」 */
@@ -852,10 +931,16 @@ frame.addEventListener("dblclick", function(e){
 });
 
 /* 控件按钮 */
-document.getElementById("zIn").onclick  = function(){ pause(); setZoomAt(zoom.s * 1.4); };
-document.getElementById("zOut").onclick = function(){ pause(); setZoomAt(zoom.s / 1.4); };
-document.getElementById("zFit").onclick = function(){ pause(); resetView(); };
-document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fitScale); };
+/* ± 作用于「最后操作的那一栏」（鼠标在哪边滚过/拖过就是哪边）；
+   ⤢ 适应窗口 与 1:1 是全局动作，两栏一起归位 —— 免得一边调好了另一边还是旧的。 */
+function zoomBy(k){
+  if(lastPane==="right") setZoomAt2(zoom2.s * k);
+  else setZoomAt(zoom.s * k);
+}
+document.getElementById("zIn").onclick  = function(){ pause(); zoomBy(1.4); };
+document.getElementById("zOut").onclick = function(){ pause(); zoomBy(1 / 1.4); };
+document.getElementById("zFit").onclick = function(){ pause(); resetView(); resetSide(); };
+document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fitScale); setZoomAt2(1 / fitScale); };
 
 clearAll(); syncUI();
 setTimeout(function(){ layout(); play(); },600);
