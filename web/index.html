@@ -610,30 +610,11 @@ footer.hist.collapsed .hist-head{margin-bottom:0}
       </div>
     </div>
 
-    <!-- 底部工具条 -->
+    <!-- 底部：只留下载入口。
+         播放 / 进度 / 倍速 / 缩放 / 对照这些控件全部交给「回放页自己那一条」——
+         它在预览里、全屏预览里、下载后独立打开时都在；而宿主这套一到全屏预览
+         就被盖住了，反而控制不到，属于本末倒置。 -->
     <div class="tools">
-      <button class="tbtn" id="playBtn" title="播放 / 暂停" aria-label="播放" disabled>❚❚</button>
-      <div class="track" id="track" role="slider" aria-label="回放进度"
-           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
-        <div class="rail3"><i id="fillBar"></i><b id="knob"></b></div>
-      </div>
-      <span class="tc" id="tc">00:00 / 00:00</span>
-      <div class="speeds" id="speeds" role="group" aria-label="倍速">
-        <button data-s="0.5" aria-pressed="false">0.5×</button>
-        <button data-s="1" aria-pressed="true">1×</button>
-        <button data-s="2" aria-pressed="false">2×</button>
-        <button data-s="4" aria-pressed="false">4×</button>
-      </div>
-      <!-- 缩放 / 对照：指令下发到回放页（也在回放页内独立可用）。
-           按钮只有符号，title 不能当可访问名用，所以另给 aria-label。 -->
-      <div class="zoomgrp" id="zoomGrp">
-        <button class="tbtn" id="zOut" title="缩小（回放页内滚轮 / 双指捏合同样可用）" aria-label="缩小">−</button>
-        <span class="zlvl" id="zLvl">100%</span>
-        <button class="tbtn" id="zIn" title="放大" aria-label="放大">＋</button>
-        <button class="tbtn" id="zFit" title="适应窗口（回放页内按 0）" aria-label="适应窗口">⤢</button>
-        <button class="tbtn" id="zRst" title="实际大小（回放页内按 1）" aria-label="实际大小">1:1</button>
-        <button class="tbtn wide" id="ghostBtn2" title="显示 / 隐藏原图对照" aria-pressed="true">对照</button>
-      </div>
       <div class="dl">
         <!-- 点击由脚本改走页内 srcdoc 预览层（blob URL 在 Android WebView 的新标签里是空白页），
              target=_blank 是原版为桌面留的兜底：Ctrl/中键、右键「在新标签页打开」仍可用。 -->
@@ -698,8 +679,6 @@ const frame = $('frame'), preview = $('preview'), pvFrame = $('pvFrame');
 let file = null, worker = null, ready = false, busy = false;
 let lastHtmlText = '';                 // 最近一次生成的回放页源码（预览走 srcdoc）
 let mockMode = false;                  // true = 没有 worker.js，用内置模拟器
-let replay = { playing: false, t: 0, total: 90, speed: 1 };  // 回放控制条状态
-let tickTimer = null;
 
 /* ---------------- 工具 ---------------- */
 /* 回放时长钳到 [10,600]：输入框的 min/max 只管住微调箭头，
@@ -757,15 +736,8 @@ function setProgressUI(frac){
   hudPct.textContent = '(' + (p * 100).toFixed(1) + '%)';
   hudPulse.classList.toggle('idle', p <= 0 || p >= 1);
 }
-/* 回放进度专用（本地兜底 tick 走这条）。
-   不能复用 setProgressUI：那条路径在 estTotal>0 时会把比例折算成「已绘制 N 笔」，
-   而 estTotal 是「生成」的总笔数 —— 时间比例乘出来的笔数是编的，不是真实回放进度。 */
-function setReplayHud(frac){
-  const p = Math.max(0, Math.min(1, frac));
-  hudCount.textContent = '回放 ' + (p * 100).toFixed(0) + '%';
-  hudPct.textContent = '(' + (p * 100).toFixed(1) + '%)';
-  hudPulse.classList.toggle('idle', p <= 0 || p >= 1);
-}
+/* （原先这里有个 setReplayHud：给「本地兜底推进的那条进度条」更新 HUD。
+     兜底进度条随宿主控制条一起删掉了，这个函数也就没有调用者了。） */
 function idleHud(){
   hudCount.textContent = file ? '等待生成' : '等待输入';
   hudPct.textContent = '';
@@ -866,9 +838,6 @@ function show(f){
      比只留左栏那个 48x64 的小图有用，用户能立刻看清选的是哪张。 */
   // 旧回放页必须卸掉：隐藏在 iframe 里它照样跑 rAF 和 250ms 上报，会把底部进度条继续往前推
   frame.removeAttribute('srcdoc');
-  clearInterval(tickTimer);
-  clearTimeout(remoteTimer);
-  clearTimeout(zoomProbe);
   showViewport(false);
   /* 舞台上已经没有回放页了（显示的是刚选的源图），控制条必须停用：
      否则点播放是往一个空 iframe 发指令，而底部进度条靠本地兜底照样会走。
@@ -890,17 +859,6 @@ function showEmpty(){
   noteRight.style.display = 'none';
   // 把旧回放页卸掉：否则它在看不见的地方继续跑 rAF + 250ms 定时器，白烧 CPU
   frame.removeAttribute('srcdoc');
-  clearInterval(tickTimer);
-  clearTimeout(remoteTimer);
-  // zoomProbe 也要清：留着它 600ms 后会把 #zLvl 改成「—」并挂上「这个回放页不支持
-  // 外部缩放」的提示，而此时舞台上根本没有回放页。
-  clearTimeout(zoomProbe);
-  clearTimeout(capsTimer);
-  remoteCtl = null;                 // 下次载入回放页时重新探测
-  $('zLvl').textContent = '100%';
-  $('zLvl').title = '';
-  $('tc').textContent = '00:00 / 00:00';
-  $('tc').title = '';
   currentRecId = null;              // 舞台上已经没东西了，别再把它当成「当前记录」
   canvasAR = 0;                     // 预览框回到「撑满」
   sizePreviewSlot();
@@ -937,29 +895,18 @@ function sizePreviewSlot(){
   slot.style.width = Math.round(w) + 'px';
   slot.style.height = Math.round(h) + 'px';
 }
+/* 只留下载入口这三个链接要跟着可用状态走。
+   播放 / 倍速 / 缩放 / 对照都归回放页自己的工具栏管，宿主不再插手。 */
 function setToolsEnabled(on){
-  $('playBtn').disabled = !on;
-  $('track').style.pointerEvents = on ? '' : 'none';
-  $('track').style.opacity = on ? '' : '.4';
-  // 和三个下载链接保持一致：禁用时一并摘掉 tabindex，否则键盘仍能聚焦上去
-  // #track 初始就是 tabindex="0"（role="slider" 必须能聚焦）。早先写成 removeAttribute，
-  // 结果 setToolsEnabled(true) 反而让滑块永久不可聚焦，方向键 / 空格的处理器成了死代码。
-  $('track').setAttribute('tabindex', on ? '0' : '-1');
   ['openHtml','dlSvg','dlHtml'].forEach((id) => {
     const a = $(id);
+    if(!a) return;
     a.classList.toggle('off', !on);
     a.setAttribute('aria-disabled', String(!on));
     // aria-disabled 只是语义，<a> 照样能 Tab 聚焦、回车激活；.off 也只挡
     // pointer-events。真要拦住键盘，得把 tabindex 一并摘掉。
     if(on) a.removeAttribute('tabindex'); else a.setAttribute('tabindex', '-1');
   });
-  $('speeds').style.opacity = on ? '' : '.4';
-  // 倍速按钮以前只改透明度、仍然可点（改了速度却没有回放页，像坏了）
-  $('speeds').querySelectorAll('button').forEach((b) => { b.disabled = !on; });
-  /* 缩放 / 对照这 6 个控件也要一起管：舞台上没有回放页时它们照样能点，
-     而点下去只会让 zoomProbe 把 #zLvl 写成「—」并挂上「这个回放页不支持外部缩放」——
-     此刻压根没有回放页，属于自相矛盾的提示。 */
-  ['zIn','zOut','zFit','zRst','ghostBtn2'].forEach((id) => { $(id).disabled = !on; });
 }
 
 drop.addEventListener('click', () => pick.click());
@@ -1005,29 +952,16 @@ function say(text, cls){
  * 而本文件内置的演示页会完整回报。所以「对面认不认这些指令」不能按 mockMode 猜，
  * 只能探测：发出指令后一小段时间内收到过对应回报 → 交给回放页；没收到 → 本地驱动。
  * （早先按 frame.srcdoc 判断是错的：能点播放时 srcdoc 必然已经设上，本地兜底永远不启动。） */
-let tickSeen = 0;                 // 最近一次收到 replay:tick 的时间戳
-let zoomSeen = 0;                 // 最近一次收到 zoom:state 的时间戳
-let remoteTimer = null, zoomProbe = null;
 
 /* ---------------- 全屏预览层 ----------------
  * 不用「新标签页」：blob URL 只在创建它的文档里有效，Android WebView 打开
  * 新标签页会得到空白页。这里用 srcdoc 注入，纯 DOM、不经过 URL 加载。 */
 let previewReturnTo = null;            // 打开预览前焦点在哪，关闭时还回去
-/* 页面内预览用的 HTML：把回放页自带的控件全部藏掉。
-   宿主这组控件已经通过 postMessage 协议与回放页对接（能真正控制它），
-   再显示回放页自己那一套就是两套重复的工具栏，而且白占画面高度。
-   两种页面结构都要覆盖：
-     · 真实回放页（tools/svg2canvas.py 产物）用 <header>/<footer>
-     · 内置演示页用 .zb（缩放条）+ #gb（对照）+ #hud/#ttl（信息角标）
-   只改内存里的预览副本：下载出去的 .html 仍是完整的、独立可用。 */
-function previewHtml(html){
-  if(!html) return html;
-  const i = html.indexOf('</head>');
-  if(i < 0) return html;
-  return html.slice(0, i) +
-    '<style>header,footer,.zb,#gb,#hud,#ttl{display:none!important}</style>' +
-    html.slice(i);
-}
+/* 页面内预览用的就是回放页原样。
+   它自带的工具栏是**唯一一套**控制 —— 预览里、全屏预览里、下载后独立打开时都在。
+   之前试过藏掉它、改用宿主那套，但宿主那套一到全屏就被盖住，控制不到，本末倒置；
+   而且旧产物不认宿主协议，会出现「有的能用有的不能用」。这里不再注入任何样式。 */
+function previewHtml(html){ return html; }
 function openPreview(htmlText){
   if(!htmlText){ toast('还没有可预览的内容', true); return; }
   previewReturnTo = document.activeElement;
@@ -1060,12 +994,17 @@ $('preview').addEventListener('keydown', (e) => {
 document.addEventListener('keydown', e => { if(e.key === 'Escape') closePreview(); });
 $('openHtml').addEventListener('click', e => { e.preventDefault(); openPreview(lastHtmlText); });
 
-/* 回放页发上来的全屏请求：结果区点 → 打开预览层；预览层里再点 → 收回 */
+/* 回放页发上来的全屏请求：结果区点 → 打开预览层；预览层里再点 → 收回。
+ *
+ * 这里只处理「全屏」一件事。播放 / 进度 / 倍速 / 缩放 / 对照**全部交给回放页
+ * 自己那条工具栏** —— 它在页面内预览、全屏预览、以及下载后独立打开时都在；
+ * 而宿主这套一到全屏预览就被盖住了，反过来控制不到，属于本末倒置。
+ * （曾试图用 postMessage 双向对接，但只有新版回放页认这套协议，
+ *   历史里的旧产物一律不认，结果就是「有的能用有的不能用」，不如不用。） */
 window.addEventListener('message', e => {
   const d = e.data;
   if(!d || typeof d !== 'object') return;
-  // 只认我们自己那两个 iframe 发来的消息：否则任何被嵌文档都能改缩放标签、
-  // 对照按钮的 aria-pressed 和底部进度条。
+  // 只认我们自己那两个 iframe 发来的消息
   const fromOurs = e.source && (
     e.source === frame.contentWindow ||
     e.source === pvFrame.contentWindow
@@ -1077,161 +1016,8 @@ window.addEventListener('message', e => {
     } else if(e.source === frame.contentWindow){
       openPreview(lastHtmlText);
     }
-    return;
-  }
-  /* 下面三类是「主舞台那个回放页」的状态回报，只认 frame 发来的。
-     预览层里跑的是同一个页面的另一个实例，演示页一开机就以 t=DUR 开局，
-     让它回报会把主进度条瞬间顶到 100% 并冻在那里。 */
-  if(e.source !== frame.contentWindow) return;
-  // 回放页上报缩放级别，同步工具条
-  if(d.type === 'zoom:state'){
-    zoomSeen = Date.now();
-    $('zLvl').textContent = Math.round((d.s || 1) * 100) + '%';
-    $('zLvl').title = '';
-    return;
-  }
-  if(d.type === 'ghost:state'){
-    $('ghostBtn2').setAttribute('aria-pressed', String(!!d.on));
-    return;
-  }
-  // 回放页上报进度，同步底部控制条
-  if(d.type === 'replay:tick'){
-    tickSeen = Date.now();
-    replay.t = d.t || 0;
-    replay.total = d.total || replay.total;
-    replay.playing = !!d.playing;
-    syncReplayUI();
   }
 });
-
-/* ---------------- 回放控制条 ----------------
- * 单文件里没有真实回放页时，这套控件驱动内置的演示时间轴；
- * 有 iframe 时，用 postMessage 把指令转发进去。 */
-/* 对端能力探测 ------------------------------------------------------------
- * 真实回放页（tools/svg2canvas.py 的产物）既没有 message 监听、也不上报任何状态，
- * 而且它自己会在 600ms 后自动播放。宿主的播放 / 倍速 / 拖动 seek 对它全是空指令 ——
- * 与其留一组「点了没反应」的控件、再让底部进度条自顾自空跑，不如探明之后明确降级：
- * 把控制条标成「由画面内部控制」，进度交给画面里它自己那条。 */
-let remoteCtl = null;        // null=未知 / true=对端会回报 / false=对端不认指令
-let capsTimer = null;
-function probeRemote(){
-  clearTimeout(capsTimer);
-  const at = Date.now();
-  capsTimer = setTimeout(() => {
-    const live = tickSeen >= at;
-    remoteCtl = live;
-    $('playBtn').disabled = !live;
-    $('track').style.opacity = live ? '' : '.4';
-    $('track').style.pointerEvents = live ? '' : 'none';
-    $('speeds').style.opacity = live ? '' : '.4';
-    $('speeds').querySelectorAll('button').forEach((b) => { b.disabled = !live; });
-    $('tc').textContent = live ? mmss(replay.t) + ' / ' + mmss(replay.total) : '由画面内部控制';
-    $('tc').title = live ? '' : '这个回放页没有开放外部控制接口，请在画面里用它自己的控制条';
-    if(!live) toast('这个回放页不支持外部控制，播放与缩放请在画面内操作');
-  }, 700);
-}
-
-function post(cmd){
-  try{
-    if(frame.contentWindow) frame.contentWindow.postMessage(cmd, '*');
-    if(preview.classList.contains('on') && pvFrame.contentWindow) pvFrame.contentWindow.postMessage(cmd, '*');
-  }catch(_){}
-}
-function syncReplayUI(){
-  const p = replay.total > 0 ? Math.min(1, replay.t / replay.total) : 0;
-  $('fillBar').style.width = (p * 100) + '%';
-  $('knob').style.left = (p * 100) + '%';
-  $('tc').textContent = mmss(replay.t) + ' / ' + mmss(replay.total);
-  $('track').setAttribute('aria-valuenow', String(Math.round(p * 100)));
-  $('playBtn').textContent = replay.playing ? '❚❚' : '▶';
-  $('playBtn').setAttribute('aria-label', replay.playing ? '暂停' : '播放');
-  // 倍速按钮的选中态跟着 replay.speed 走：生成完成和载入历史都会把 speed 打回 1，
-  // 但按钮的 aria-pressed 不会自己变 —— 会出现「4× 亮着、实际按 1× 推进」。
-  $('speeds').querySelectorAll('button').forEach((b) => {
-    b.setAttribute('aria-pressed', String(parseFloat(b.dataset.s) === replay.speed));
-  });
-}
-/* ---- 缩放 / 对照：主页面工具条 ---- */
-function sendZoom(cmd, val){
-  const m = { type: cmd };
-  if(val !== undefined) m.v = val;
-  post(m);
-  // 真实回放页不认这些指令、也不回报 zoom:state。探一下：没回报就把级别显示成
-  // 「—」并给出提示，否则用户连点缩放却毫无变化，会以为是自己没点到。
-  const at = Date.now();
-  clearTimeout(zoomProbe);
-  zoomProbe = setTimeout(() => {
-    if(zoomSeen >= at) return;                 // 对面在管，不插手
-    $('zLvl').textContent = '—';
-    $('zLvl').title = '这个回放页不支持外部缩放，请在画面内用滚轮 / 双指操作';
-  }, 600);
-}
-$('zIn').addEventListener('click', () => sendZoom('zoom:in'));
-$('zOut').addEventListener('click', () => sendZoom('zoom:out'));
-$('zFit').addEventListener('click', () => sendZoom('zoom:fit'));
-$('zRst').addEventListener('click', () => sendZoom('zoom:1'));
-$('ghostBtn2').addEventListener('click', (e) => {
-  const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
-  e.currentTarget.setAttribute('aria-pressed', String(on));
-  post({ type:'ghost:set', on: on });
-});
-$('playBtn').addEventListener('click', () => {
-  if($('playBtn').disabled) return;
-  replay.playing = !replay.playing;
-  post({ type: replay.playing ? 'replay:play' : 'replay:pause' });
-  if(replay.playing) startTick();
-  else { clearInterval(tickTimer); clearTimeout(remoteTimer); }
-  syncReplayUI();
-});
-$('speeds').addEventListener('click', e => {
-  const b = e.target.closest('button');
-  if(!b) return;
-  $('speeds').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed','false'));
-  b.setAttribute('aria-pressed','true');
-  replay.speed = parseFloat(b.dataset.s);
-  post({ type:'replay:speed', v: replay.speed });
-});
-function seekTo(frac){
-  frac = Math.max(0, Math.min(1, frac));
-  replay.t = frac * replay.total;
-  post({ type:'replay:seek', t: replay.t });
-  syncReplayUI();
-}
-$('track').addEventListener('click', e => {
-  if($('playBtn').disabled) return;
-  const r = e.currentTarget.getBoundingClientRect();
-  seekTo((e.clientX - r.left) / r.width);
-});
-$('track').addEventListener('keydown', e => {
-  if($('playBtn').disabled) return;
-  if(e.key === 'ArrowLeft'){ e.preventDefault(); seekTo((replay.t - 5) / replay.total); }
-  if(e.key === 'ArrowRight'){ e.preventDefault(); seekTo((replay.t + 5) / replay.total); }
-  if(e.key === ' '){ e.preventDefault(); $('playBtn').click(); }
-});
-/* 推进底部进度条 / 时间码。
-   真实回放页不上报进度（它自己有一条进度条），所以先等 500ms 探一次：
-   探测期内收到过 replay:tick → 对面在管，不插手；没收到 → 本地按 speed 推进。
-   本地推进用的 replay.total 与回放页的 DUR 同源（都来自「时长」输入框），
-   所以两边比例是对得上的。 */
-function startTick(){
-  clearInterval(tickTimer);
-  clearTimeout(remoteTimer);
-  // 探测已经判定对端不认指令（真实回放页），那就别本地空跑一根对不上的进度条 ——
-  // 它自己的进度条在画面里，宿主这条纯属误导。
-  if(remoteCtl === false){ return; }
-  const at = Date.now();
-  remoteTimer = setTimeout(() => {
-    if(tickSeen >= at) return;
-    tickTimer = setInterval(() => {
-      if(!replay.playing) return;
-      replay.t += 0.25 * replay.speed;
-      if(replay.t >= replay.total){ replay.t = replay.total; replay.playing = false; }
-      syncReplayUI();
-      setReplayHud(replay.t / replay.total);
-      if(replay.t >= replay.total) clearInterval(tickTimer);
-    }, 250);
-  }, 500);
-}
 
 /* ---------------- IndexedDB 历史 ----------------
  * 用 IndexedDB 而不是 localStorage：单条记录 5~30 MB，localStorage 只有 5 MB。 */
@@ -1984,6 +1770,15 @@ document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fit
     return u.html;
   }
 
+/* 可用区域一变就重算。
+   只在几个固定时机调用是不够的：生成完成时历史区会折叠、舞台高度瞬间变大，
+   而那次调用发生在折叠之前，于是拿的是旧高度（预览框因此偏扁）；
+   窗口 resize、侧栏重排同理。交给 ResizeObserver 最稳。 */
+if(window.ResizeObserver){
+  const area = document.querySelector('.canvas-area');
+  if(area) new ResizeObserver(() => sizePreviewSlot()).observe(area);
+}
+
 /* ---------------- 渲染历史 ---------------- */
 async function renderHistory(){
   const list = await dbAll();
@@ -2049,14 +1844,8 @@ async function renderHistory(){
           const dm = /var DURATION=([\d.]+)/.exec(lastHtmlText);
           dur = dm ? parseFloat(dm[1]) : 90;
         }
-        replay = { playing: false, t: 0, total: dur, speed: 1 };
-        clearInterval(tickTimer);
-        clearTimeout(remoteTimer);   // 上一次点播放留下的那个 500ms 探测哨兵
-        clearTimeout(zoomProbe);
         frame.srcdoc = previewHtml(lastHtmlText);
-        probeRemote();
         showViewport(true);
-        $('playBtn').disabled = false;
         setHud('VIEWFINDER // ARCHIVE', 'SOURCE ' + (rec.dims || '—'), 'RECORD ' + rec.id.slice(-6));
         hudCount.textContent = (rec.strokes || 0).toLocaleString() + ' 笔';
         hudPct.textContent = '';
@@ -2072,9 +1861,7 @@ async function renderHistory(){
         $('openHtml').href = $('dlHtml').href;
         $('szSvg').textContent = fmtSize(rec.svg.size);
         $('szHtml').textContent = fmtSize(rec.html.size);
-        syncReplayUI();
-        /* 三个链接都填好之后才开放工具条：早先在这一串之前就 setToolsEnabled(true)，
-           中间那几毫秒里链接还指着上一件作品。 */
+        /* 三个链接都填好之后才开放下载入口 */
         setToolsEnabled(true);
         toast('已载入历史记录');
       }catch(err){
@@ -2712,8 +2499,6 @@ async function onDone(m){
   frame.srcdoc = previewHtml(lastHtmlText);
   showViewport(true);
   setToolsEnabled(true);
-  clearInterval(tickTimer);
-  probeRemote();               // 探一下这个回放页认不认外部指令，不认就把控制条降级
 
   const dims = (m.size || [0,0]).join(' × ');
   setHud('VIEWFINDER // RENDERED', 'SOURCE ' + (m.size || []).join('×'), 'CANVAS ' + dims + ' PT');
@@ -2726,8 +2511,6 @@ async function onDone(m){
   noteRight.textContent = 'FRAME ' + String(m.strokes || 0).padStart(5, '0');
   noteRight.style.display = '';
 
-  replay = { playing: false, t: 0, total: lastDuration, speed: 1 };
-  syncReplayUI();
 
   // 存进历史（缩略图取用户选的原图）
   const th = file ? await thumbOf(file) : '';
@@ -2872,12 +2655,11 @@ $('hClear').addEventListener('click', async () => {
 
 /* 窗口尺寸变化时重算底部控制条的比例显示。四角括号和网格都是绝对定位的纯 CSS，
    不需要 JS 参与 —— 原来的注释写「保持角标和网格在位」，与实际做的事不符。 */
-window.addEventListener('resize', () => { syncReplayUI(); sizePreviewSlot(); });
+window.addEventListener('resize', () => { sizePreviewSlot(); });
 
 /* ---------------- 启动 ---------------- */
 (async () => {
   showEmpty();
-  syncReplayUI();
   idleHud();
   try{
     db = await openDB();
