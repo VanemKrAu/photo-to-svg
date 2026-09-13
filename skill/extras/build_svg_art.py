@@ -177,13 +177,14 @@ def trace(reference, colors, passes, epsilon, min_area, background,
 
     luminance = palette.astype(np.float64) @ np.array([0.2126, 0.7152, 0.0722])
     color_order = sorted(np.unique(labels), key=lambda i: (-float(luminance[i]), int(i)))
-    matte = np.array(background, np.int16)
 
+    # 这里原本有一道省笔优化：与底板色差 ≤3 的调色板色「整簇跳过不画」。
+    # 2026-09-14 用户要求取消 —— 每个地方都必须实打实画出来，底板只当纸用。
+    # 原因：跳过的块露出的是底板色，而该处的真实颜色只是「接近」底板
+    # （填充色取的是区域均值，不是调色板色本身），浅色图上会看出一块块没画到的方斑。
+    # background 参数仍保留在签名里：底板 rect 由 write_svg 写，调用方接口不变。
     raw = []
     for position, color in enumerate(color_order):
-        rgb = palette[color]
-        if int(np.abs(rgb.astype(np.int16) - matte).max()) <= 3:
-            continue                                   # 与底色同色：不必画
         for component in groups.get(int(color), ()):
             x, y, width, height = map(int, boxes[component])
             area = int(areas[component])
@@ -575,7 +576,8 @@ def main():
     parser.add_argument("--passes", type=int, default=3)
     parser.add_argument("--epsilon", type=float, default=0.32)
     parser.add_argument("--min-area", type=int, default=6)
-    parser.add_argument("--background", default="#000006")
+    # 底板默认纸白：与 make_art / web_run 的底板保持同一套约定（白纸作画）
+    parser.add_argument("--background", default="#f0f0f0")
     parser.add_argument("--dark-cut", type=int, default=14, help="与底色色差≤此值的像素压平为底色")
     parser.add_argument("--title", default="纯 SVG 描摹插画")
     parser.add_argument("--base", type=float, default=0.028, help="1× 下每笔间隔（秒）")

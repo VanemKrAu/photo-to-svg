@@ -84,7 +84,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('input', type=Path)
     ap.add_argument('--out', default='/tmp/verify')
-    ap.add_argument('--bg', default='#000006')
+    # 底板默认纸白：必须与生成时一致，否则比对结果会失真
+    ap.add_argument('--bg', default='#f0f0f0')
     ap.add_argument('--dark-cut', type=int, default=14)
     ap.add_argument('--max-width', type=int, default=760)
     ap.add_argument('--colors', type=int, default=96)

@@ -5,7 +5,7 @@ make_art.py —— 一条命令跑完「照片 → 描摹 SVG → Canvas 逐笔�
 
 把这一路踩过的坑全部固化在流程里，不需要再记住任何参数：
 
-  1. 描摹：零妥协参数（colors 512 / passes 0 / min_area 1），背景色自动取原图高频色
+  1. 描摹：零妥协参数（colors 512 / passes 0 / min_area 1），底板固定纸白（在白纸上作画）
   2. 去掉纯 SVG 版的「白点」：给所有 <path> 补同色 stroke + stroke-width 0.6
   3. 生成 Canvas 回放页：真线稿层（Canny 轮廓）+ 大色块扫描线切分 + 按视觉重量分配时间
   4. 写一份.json 参数报告
@@ -73,41 +73,41 @@ def preprocess(photo, mode, workdir):
     return out, "%s → %dx%d" % (mode, img.shape[1], img.shape[0])
 
 
+# 底板色恒为纸白：整幅作品是「在白纸上作画」。
+# 它同时决定「显示底板」和「哪些色块可以整簇跳过」，两处必须同源 ——
+# SVG 的底板 rect 与回放页的 canvas 背景都取自这一个值。
+PAPER = "#f0f0f0"
+
+
 def pick_background(photo):
-    """选底色。
+    """底板恒为纸白（PAPER），不再按画面自动取色。
 
-    底色的作用是「哪些颜色可以整簇跳过不画」。选错的后果很严重：
-      * 选到画面里存在的颜色   -> 那片区域被挖空，露出底色（在深色区就是白点）
-      * 选到画面里不存在的颜色 -> 安全，底板只在缝隙里露一点点
+    底板的作用是「哪些颜色可以整簇跳过不画」：与底板色差 ≤3 的色块整簇略过，
+    露出来的就是底板。所以它既决定显示、又决定跳过判定，两者必须同源 ——
+    SVG 的底板 rect 与回放页的 canvas 背景都取自这里，天生一致。
 
-    所以策略是：高频色必须**明显**高频（>12%）才敢用；否则一律用画面里没有的中性色。
-    实测反例：一张海边照最高频色 #686868 占 5.94%，恰好越过旧的 5% 阈值，
-    而 #686868 正是画面里的阴影灰 -> 人物和沙滩的阴影被整簇挖掉，满图白点。
+    历史上这里按画面自动取色（高频色 >12% 就用它，否则按明暗给 #f0f0f0/#101010），
+    深色图因此拿到深色底板。改成固定纸白后：
+      * 浅色图：与旧行为一致（本来就是 #f0f0f0），跳过判定照旧
+      * 深色图：深色区不再被整簇跳过，会一笔笔画在白纸上 —— 要的就是「纸上作画」
+        的观感；代价是笔数与体积上升，这是白底必然的账
+
+    注：2026-09-14 那次「回放页底板写死浅色 → 深色图满屏白斑」的根因是两边底板
+    不一致；固定同源之后这个问题从定义上消失，所以 svg2canvas.py 里「从 SVG 读
+    底板色」的机制要保留，不能改回写死。
+
+    dark_cut 恒为 0：曾经深色图给 14，实测那是「暗斑」的元凶 —— 与底色差 ≤14 的
+    像素（皮肤阴影、水渍、暗部渐变）被整片涂成底色、描摹时归入背景不画，实测能
+    压平 26% 的画面；取消后笔数约 +25%，换来暗部完整（2026-09-14 用户实测反馈）。
+
+    ratio 仍然算出来，但只用于日志，不再影响底板。
     """
     im = np.array(Image.open(photo).convert("RGB"))
     flat = im.reshape(-1, 3)
     q = flat // 8 * 8
-    cols, cnt = np.unique(q, axis=0, return_counts=True)
-    top = int(np.argmax(cnt))
-    bg = cols[top]
-    ratio = cnt[top] / len(flat)
-    lum = 0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2]
-
-    mean_lum = float(0.2126 * flat[:, 0].mean() + 0.7152 * flat[:, 1].mean()
-                     + 0.0722 * flat[:, 2].mean())
-    neutral = "#f0f0f0" if mean_lum >= 96 else "#101010"
-
-    if ratio >= 0.12:
-        hexbg = "#%02x%02x%02x" % tuple(int(v) for v in bg)
-        # dark_cut 统一给 0。曾经深色图给 14，实测那是「暗斑」的元凶：
-        # 与底色差 ≤14 的像素（皮肤阴影、水渍、暗部渐变）被整片涂成底色、
-        # 描摹时归入背景不画 —— 实测能压平 26% 的画面。取消后笔数约 +25%，
-        # 换来暗部完整（2026-09-14 用户实测报「治标不治本」后改）。
-        return hexbg, 0, ratio
-
-    if ratio >= 0.05:
-        pass      # 旧阈值下会误用画面里的颜色，这里降级为中性色（见上面的反例）
-    return neutral, 0, ratio
+    cnt = np.unique(q, axis=0, return_counts=True)[1]
+    ratio = float(cnt.max()) / len(flat)
+    return PAPER, 0, ratio
 
 
 def run(cmd, **kw):
@@ -175,7 +175,7 @@ def main():
     from PIL import Image as _I
     with _I.open(photo) as _im:
         W, H = _im.size
-    print("描摹尺寸 %dx%d   底色 %s（高频色占比 %.1f%%，dark_cut %d）"
+    print("描摹尺寸 %dx%d   底板 %s（固定纸白）  画面最高频色占比 %.1f%%  dark_cut %d"
           % (W, H, bg, ratio * 100, dark_cut))
 
     print("\n［1/3］描摹 SVG")
