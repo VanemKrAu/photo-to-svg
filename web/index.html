@@ -377,6 +377,8 @@ footer.hist{
 }
 body.sel-mode .hitem .ck{display:grid}
 body.sel-mode .hitem .acts{display:none}
+/* 多选态下「全部清空」是多余的：要全删就点「删除选中」，留着反而两个都指向毁灭性操作 */
+body.sel-mode #hClear{display:none}
 .hitem.sel{border-color:#EDEDED;background:#1C1C22}
 .hitem.sel .ck{border-color:#EDEDED;background:#EDEDED;color:#0B0B0D}
 .hist-empty{font:400 11px var(--mono);color:var(--dim);padding:20px 0;text-align:center;width:100%}
