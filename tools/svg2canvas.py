@@ -493,6 +493,12 @@ function paintRange(from,to){
       ctx.fillStyle="rgb("+((c>>16)&255)+","+((c>>8)&255)+","+(c&255)+")";
     }
     ctx.fill("evenodd");
+    /* 补一层同色描边：色块之间会有发丝缝，不补的话缝里露出底板 ——
+       深色图上就是密集的黑线/黑斑（脸这种细节密集处最明显）。
+       SVG 版当年同样补过（stroke-width 0.6），Canvas 版这里一直漏着。 */
+    ctx.strokeStyle=ctx.fillStyle;
+    ctx.lineWidth=0.7; ctx.lineJoin="round";
+    ctx.stroke();
   }
 }
 function clearAll(){ ctx.fillStyle="__BG__"; ctx.fillRect(0,0,W,H); }   /* 底板色必须与 SVG 里的一致 */

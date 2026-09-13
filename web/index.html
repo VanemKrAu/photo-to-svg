@@ -876,6 +876,19 @@ frame.addEventListener("dblclick", function(e){
       to: `document.getElementById("zIn").onclick  = function(){ pause(); setZoomAt(zoom.s * 1.4); };\ndocument.getElementById("zOut").onclick = function(){ pause(); setZoomAt(zoom.s / 1.4); };` },
     { from: `document.getElementById("zRst").onclick = function(){ pause(); setZoom(1 / fitScale); };`,
       to: `document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fitScale); };` },
+    /* 色块补同色描边（2026-09-14）：不补的话色块间的发丝缝会露出底板，
+       深色图上就是密集的黑线/黑斑（用户报「脸上有黑色斑纹」） */
+    { from: `    ctx.fill("evenodd");
+  }
+}`,
+      to: `    ctx.fill("evenodd");
+    /* 补一层同色描边：色块之间会有发丝缝，不补的话缝里露出底板 ——
+       深色图上就是密集的黑线/黑斑（脸这种细节密集处最明显）。 */
+    ctx.strokeStyle=ctx.fillStyle;
+    ctx.lineWidth=0.7; ctx.lineJoin="round";
+    ctx.stroke();
+  }
+}` },
     /* 全屏改「CSS 伪全屏」（2026-09-14）：Android WebView（VIA 等）会把
        requestFullscreen 当「视频全屏」并强制横屏，竖图也被转；CSS 方案绕开它 */
     { from: `  footer{flex:0 0 auto;padding:8px 12px calc(10px + env(safe-area-inset-bottom));
