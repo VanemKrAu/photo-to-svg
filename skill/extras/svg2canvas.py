@@ -204,15 +204,27 @@ def build_lineart(photo, W, H, dark=0.78, seg_pts=16, min_pts=8, approx=1.0):
     # 先从头端点起步（度=1），保证一条线尽量完整；剩下的（闭环）再任意起头
     ends = [q for q in pts
             if sum(1 for dx, dy in NEIGH if (q[0] + dx, q[1] + dy) in pts) == 1]
+
+    # 线稿筛选：既看长度，也看「这条线画在哪」——
+    # 皮肤/高光上的短碎线是照片纹理（噪点、眼妆过渡），不是结构轮廓，
+    # 画出来就是脸上一道道脏线（用户 2026-09-14 报「脸上有黑色斑纹」）。
+    # 判据：链上偏亮（>150）的点占比超过 0.6 → 丢弃。
+    luma = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    def keep(c):
+        if len(c) < min_pts:
+            return False
+        bright = sum(1 for (x, y) in c if luma[y, x] > 150)
+        return bright / len(c) < 0.6
+
     chains = []
     for p0 in ends:
         if p0 in pts:
             c = walk(p0)
-            if len(c) >= min_pts:
+            if keep(c):
                 chains.append(c)
     while pts:
         c = walk(next(iter(pts)))
-        if len(c) >= min_pts:
+        if keep(c):
             chains.append(c)
 
     out = []
