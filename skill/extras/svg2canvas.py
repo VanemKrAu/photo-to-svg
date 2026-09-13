@@ -283,9 +283,12 @@ TEMPLATE = r'''<!DOCTYPE html>
   canvas{display:block;width:100%;height:100%;background:__BG__}
   #ghost{position:absolute;inset:0;background-image:var(--ghostimg);background-size:100% 100%;
     background-repeat:no-repeat;clip-path:inset(0 0 0 50%);pointer-events:none}
-  /* 宽屏并排栏：只显示跟当前帧同步的原图块 */
+  /* 宽屏并排栏：只显示跟当前帧同步的原图块。
+     里面放一个和左栏 .view 同款的可变换层（#sideView），
+     缩放/平移与左栏完全同步 —— 滚轮在哪一边都能缩放，两边永远看同一区域 */
   #side{display:none;position:relative;flex:0 0 auto;
-    box-shadow:0 10px 40px rgba(0,0,0,.8),0 0 0 1px var(--line);border-radius:5px;overflow:hidden;
+    box-shadow:0 10px 40px rgba(0,0,0,.8),0 0 0 1px var(--line);border-radius:5px;overflow:hidden}
+  #sideView{position:absolute;left:0;top:0;will-change:transform;
     background-image:var(--ghostimg);background-size:100% 100%;background-repeat:no-repeat}
   #side .tag{position:absolute;left:9px;top:9px;font-size:11px;letter-spacing:.5px;
     color:#f2f2f8;background:rgba(0,0,0,.48);padding:3px 9px;border-radius:5px;
@@ -404,7 +407,7 @@ TEMPLATE = r'''<!DOCTYPE html>
     </div>
     <div id="toast">绘制中…</div>
   </div>
-  <div id="side"><div class="tag">原图</div></div>
+  <div id="side"><div id="sideView"></div><div class="tag">原图</div></div>
   <div class="zoombar" id="zoombar">
     <button id="zOut" title="缩小（滚轮 / 双指捏合）">−</button>
     <span class="lvl" id="zLvl">100%</span>
@@ -640,7 +643,8 @@ document.getElementById("ghostBtn").addEventListener("click",function(){
   }
   layout();
 });
-var frame=document.getElementById("frame"), VIEW=document.getElementById("view");
+var frame=document.getElementById("frame"), VIEW=document.getElementById("view"),
+    SIDEVIEW=document.getElementById("sideView");
 function setSplit(clientX){
   var r=VIEW.getBoundingClientRect();          /* 分界按「画面」（不是视口）的比例算 */
   var x=Math.max(0,Math.min(100,(clientX-r.left)/r.width*100));
@@ -650,7 +654,7 @@ function setSplit(clientX){
 frame.addEventListener("pointerdown",function(e){ if(ghostOn){ pause(); setSplit(e.clientX); } });
 frame.addEventListener("pointermove",function(e){
   if(!ghostOn) return;
-  if(e.pointerType==="mouse" || e.buttons) setSplit(e.clientX);
+  if(e.buttons) setSplit(e.clientX);   /* 只在按住拖动时移动分界线；鼠标悬停不再带着它跑 */
 });
 
 /* ---- 全屏：CSS 伪全屏（藏起页头/页脚，画面区占满）----
@@ -721,7 +725,10 @@ function layout(){
   fitW=Math.max(1,Math.round(W*s)); fitH=Math.max(1,Math.round(H*s));
   VIEW.style.width =fitW+"px";
   VIEW.style.height=fitH+"px";
-  if(dual){ sideEl.style.width=fitW+"px"; sideEl.style.height=fitH+"px"; }
+  if(dual){
+    sideEl.style.width=fitW+"px"; sideEl.style.height=fitH+"px";
+    SIDEVIEW.style.width=fitW+"px"; SIDEVIEW.style.height=fitH+"px";
+  }
   clampPan();
   applyView();
 }
@@ -742,6 +749,12 @@ function applyView(){
   var bx=(fw-fitW*zoom.s)/2+zoom.tx, by=(fh-fitH*zoom.s)/2+zoom.ty;
   VIEW.style.transformOrigin = "0 0";
   VIEW.style.transform = "translate(" + bx + "px," + by + "px) scale(" + zoom.s + ")";
+  /* 右栏原图用同一套缩放/平移 —— 但它没有「居中基准」（窗口就是整图），
+     所以直接用 zoom.tx/ty，不加 frame 的居中偏移。两边永远看同一区域。 */
+  if(SIDEVIEW){
+    SIDEVIEW.style.transformOrigin = "0 0";
+    SIDEVIEW.style.transform = "translate(" + zoom.tx + "px," + zoom.ty + "px) scale(" + zoom.s + ")";
+  }
   var zl = document.getElementById("zLvl");
   if(zl) zl.textContent = Math.round(zoom.s * 100) + "%";
 }
@@ -778,10 +791,24 @@ frame.addEventListener("wheel", function(e){
   setZoomAt(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX - r.left, e.clientY - r.top);
 }, { passive:false });
 
+/* 右栏（原图）也能滚轮缩放：和左栏共享同一套缩放/平移状态，两边永远看同一区域。
+   锚点要做一次换算 —— 右栏没有「居中基准」（窗口就是图），
+   把「相对右栏的坐标」加回 frame 的居中偏移，才是 setZoomAt 要的坐标系。 */
+sideEl.addEventListener("wheel", function(e){
+  e.preventDefault();
+  pause();
+  var sr = SIDEVIEW.getBoundingClientRect();
+  var ax = (e.clientX - sr.left) + (frame.clientWidth  - fitW*zoom.s)/2;
+  var ay = (e.clientY - sr.top ) + (frame.clientHeight - fitH*zoom.s)/2;
+  setZoomAt(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), ax, ay);
+}, { passive:false });
+
 /* 触屏：双指捏合缩放、放大后单指拖动平移 */
 var ptrs = {}, pinch = null, pan = null;
 frame.addEventListener("pointerdown", function(e){
   ptrs[e.pointerId] = { x:e.clientX, y:e.clientY };
+  try{ frame.setPointerCapture(e.pointerId); }catch(_){}
+  /* 捕获指针：拖出画面范围也能收到 pointerup，避免「松手后画面还跟着鼠标跑」 */
   var ids = Object.keys(ptrs);
   if(ids.length === 2){
     var a = ptrs[ids[0]], b = ptrs[ids[1]];

@@ -895,6 +895,66 @@ frame.addEventListener("dblclick", function(e){
     ctx.stroke();
   }
 }` },
+    /* 右栏原图改用可变换层 #sideView（2026-09-14）：可滚轮缩放、与左栏同步；
+       顺带修「拖出画面松手后画面粘住」与「分界线跟着鼠标跑」 */
+    { from: `  #side{display:none;position:relative;flex:0 0 auto;
+    box-shadow:0 10px 40px rgba(0,0,0,.8),0 0 0 1px var(--line);border-radius:5px;overflow:hidden;
+    background-image:var(--ghostimg);background-size:100% 100%;background-repeat:no-repeat}`,
+      to: `  #side{display:none;position:relative;flex:0 0 auto;
+    box-shadow:0 10px 40px rgba(0,0,0,.8),0 0 0 1px var(--line);border-radius:5px;overflow:hidden}
+  #sideView{position:absolute;left:0;top:0;will-change:transform;
+    background-image:var(--ghostimg);background-size:100% 100%;background-repeat:no-repeat}` },
+    { from: `  <div id="side"><div class="tag">原图</div></div>`,
+      to: `  <div id="side"><div id="sideView"></div><div class="tag">原图</div></div>` },
+    { from: `var frame=document.getElementById("frame"), VIEW=document.getElementById("view");`,
+      to: `var frame=document.getElementById("frame"), VIEW=document.getElementById("view"),
+    SIDEVIEW=document.getElementById("sideView");` },
+    { from: `  if(dual){ sideEl.style.width=fitW+"px"; sideEl.style.height=fitH+"px"; }
+  clampPan();`,
+      to: `  if(dual){
+    sideEl.style.width=fitW+"px"; sideEl.style.height=fitH+"px";
+    SIDEVIEW.style.width=fitW+"px"; SIDEVIEW.style.height=fitH+"px";
+  }
+  clampPan();` },
+    { from: `  VIEW.style.transform = "translate(" + bx + "px," + by + "px) scale(" + zoom.s + ")";
+  var zl = document.getElementById("zLvl");`,
+      to: `  VIEW.style.transform = "translate(" + bx + "px," + by + "px) scale(" + zoom.s + ")";
+  if(SIDEVIEW){
+    SIDEVIEW.style.transformOrigin = "0 0";
+    SIDEVIEW.style.transform = "translate(" + zoom.tx + "px," + zoom.ty + "px) scale(" + zoom.s + ")";
+  }
+  var zl = document.getElementById("zLvl");` },
+    { from: `frame.addEventListener("pointerdown", function(e){
+  ptrs[e.pointerId] = { x:e.clientX, y:e.clientY };
+  var ids = Object.keys(ptrs);`,
+      to: `frame.addEventListener("pointerdown", function(e){
+  ptrs[e.pointerId] = { x:e.clientX, y:e.clientY };
+  try{ frame.setPointerCapture(e.pointerId); }catch(_){}
+  var ids = Object.keys(ptrs);` },
+    { from: `frame.addEventListener("pointermove",function(e){
+  if(!ghostOn) return;
+  if(e.pointerType==="mouse" || e.buttons) setSplit(e.clientX);
+});`,
+      to: `frame.addEventListener("pointermove",function(e){
+  if(!ghostOn) return;
+  if(e.buttons) setSplit(e.clientX);   /* 只在按住拖动时移动分界线 */
+});` },
+    { from: `  var r = frame.getBoundingClientRect();
+  setZoomAt(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX - r.left, e.clientY - r.top);
+}, { passive:false });`,
+      to: `  var r = frame.getBoundingClientRect();
+  setZoomAt(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX - r.left, e.clientY - r.top);
+}, { passive:false });
+/* 右栏（原图）也能滚轮缩放：与左栏共享同一套缩放/平移状态 */
+sideEl.addEventListener("wheel", function(e){
+  e.preventDefault();
+  pause();
+  var sr = SIDEVIEW.getBoundingClientRect();
+  var ax = (e.clientX - sr.left) + (frame.clientWidth  - fitW*zoom.s)/2;
+  var ay = (e.clientY - sr.top ) + (frame.clientHeight - fitH*zoom.s)/2;
+  setZoomAt(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), ax, ay);
+}, { passive:false });` },
+
     /* 全屏改「CSS 伪全屏」（2026-09-14）：Android WebView（VIA 等）会把
        requestFullscreen 当「视频全屏」并强制横屏，竖图也被转；CSS 方案绕开它 */
     { from: `  footer{flex:0 0 auto;padding:8px 12px calc(10px + env(safe-area-inset-bottom));
