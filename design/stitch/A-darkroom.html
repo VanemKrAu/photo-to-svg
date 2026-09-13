@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>图片转 SVG - 暗房矢量描摹工作室</title>
+<!-- Tailwind CSS CDN with forms and container queries -->
+<script src="vendor/tailwind.js"></script>
+<!-- Google Fonts for Chinese Serif and Mono styling -->
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'darkroom-black': '#0E0D0C',
+            'darkroom-panel': '#161412',
+            'darkroom-stage': '#1A1816',
+            'darkroom-hairline': '#262320',
+            'darkroom-border': '#2D2926',
+            'ember': '#E2603F',
+            'ember-hover': '#cf5333',
+            'warm-white': '#EDE8E3',
+            'warm-gray': '#A39D96',
+            'warm-dim': '#8E8881',
+          },
+          fontFamily: {
+            serif: ['"Songti SC","SimSun"', 'serif'],
+            mono: ['"Consolas","Courier New"', 'ui-monospace', 'monospace'],
+            sans: ['-apple-system', 'BlinkMacSystemFont', '"PingFang SC"', '"Hiragino Sans GB"', '"Microsoft YaHei"', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+<!-- Custom styles for typography and subtle fine-line borders -->
+<style data-purpose="base-styling">
+    body {
+      background-color: #0E0D0C;
+      color: #EDE8E3;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      background-color: #E2603F;
+      cursor: pointer;
+    }
+    input[type="range"]::-moz-range-thumb {
+      background-color: #E2603F;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-[#E2603F] selection:text-white">
+<!-- BEGIN: MainHeader -->
+<header class="h-14 border-b border-darkroom-hairline bg-darkroom-panel px-6 flex items-center justify-between sticky top-0 z-30">
+<div class="flex items-center space-x-5">
+<!-- Product Branding -->
+<h1 class="font-serif text-lg tracking-wide text-warm-white font-semibold">图片转 SVG</h1>
+<div class="h-3 w-[1px] bg-darkroom-border"></div>
+<!-- One-line Functional Subtitle -->
+<p class="text-xs text-warm-dim tracking-normal">把照片变成矢量 SVG，并回放整个作画过程 · 全部在你的浏览器里完成，图片不上传</p>
+</div>
+<!-- Local Processing State Indicator -->
+<div class="flex items-center space-x-2 text-xs text-warm-gray">
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-ember"></span>
+<span class="tracking-wider">本地浏览器离线运算</span>
+</div>
+</header>
+<!-- END: MainHeader -->
+<!-- BEGIN: WorkspaceContainer -->
+<main class="flex-1 max-w-[1720px] w-full mx-auto p-4 sm:p-5 flex flex-col gap-4">
+<!-- Upper Grid: Left Controls Panel + Right Artboard Stage -->
+<div class="grid grid-cols-12 gap-4 flex-1">
+<!-- BEGIN: LeftControlPanel -->
+<aside class="col-span-12 lg:col-span-4 xl:col-span-3 bg-darkroom-panel border border-darkroom-hairline rounded-[4px] p-5 flex flex-col justify-between space-y-5" data-purpose="control-panel">
+<div class="space-y-5">
+<!-- Source File Info Section -->
+<div class="space-y-2">
+<div class="flex items-center justify-between text-xs text-warm-dim">
+<span>输入源文件</span>
+<div class="flex items-center space-x-3">
+<button class="text-warm-gray hover:text-warm-white transition-colors" type="button">更换</button>
+<span class="text-darkroom-border">/</span>
+<button class="text-warm-gray hover:text-ember transition-colors" type="button">移除</button>
+</div>
+</div>
+<!-- Thumbnail and Meta Card -->
+<div class="flex items-center gap-3 p-2 bg-darkroom-black border border-darkroom-hairline rounded-[4px]">
+<div class="w-14 h-14 shrink-0 rounded-[2px] overflow-hidden border border-darkroom-border bg-darkroom-stage">
+<img alt="走廊人像源照片缩略图" class="w-full h-full object-cover" src="vendor/img/img-61866022b6.jpg"/>
+</div>
+<div class="min-w-0 flex-1">
+<p class="text-xs font-medium text-warm-white truncate">走廊人像_源片.jpg</p>
+<p class="text-[11px] font-mono text-warm-dim mt-1">2400 × 3000 像素 · 3.8 MB</p>
+</div>
+</div>
+<!-- Alternative Drop Area -->
+<div class="border border-dashed border-darkroom-border hover:border-warm-dim rounded-[4px] py-2 px-3 flex items-center justify-center space-x-2 text-xs text-warm-gray transition-colors cursor-pointer">
+<svg class="w-3.5 h-3.5 text-warm-dim" fill="none" stroke="currentColor" stroke-width="1.5" viewbox="0 0 24 24">
+<path d="M12 4.5v15m7.5-7.5h-15" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>点击或拖入图片</span>
+</div>
+</div>
+<!-- Quality Selection Matrix -->
+<div class="space-y-2">
+<label class="block text-xs text-warm-dim">输出精度与耗时</label>
+<div class="space-y-1.5">
+<!-- Item 1: 快速 -->
+<label class="flex items-center justify-between p-2.5 rounded-[4px] border border-darkroom-hairline bg-darkroom-black cursor-pointer hover:border-darkroom-border transition-colors">
+<div class="flex items-center space-x-2.5">
+<input class="w-3.5 h-3.5 text-ember bg-darkroom-panel border-darkroom-border focus:ring-0 focus:ring-offset-0" name="render-quality" type="radio"/>
+<span class="text-xs text-warm-white font-medium">快速</span>
+</div>
+<span class="text-xs font-mono text-warm-dim">800 · 约 1 分钟</span>
+</label>
+<!-- Item 2: 标准 (Selected) -->
+<label class="flex items-center justify-between p-2.5 rounded-[4px] border border-ember bg-[#1C1815] cursor-pointer">
+<div class="flex items-center space-x-2.5">
+<input checked="" class="w-3.5 h-3.5 text-ember bg-darkroom-panel border-ember focus:ring-0 focus:ring-offset-0" name="render-quality" type="radio"/>
+<span class="text-xs text-warm-white font-medium">标准</span>
+</div>
+<span class="text-xs font-mono text-warm-gray">1200 · 约 1.5 分钟</span>
+</label>
+<!-- Item 3: 高清 -->
+<label class="flex items-center justify-between p-2.5 rounded-[4px] border border-darkroom-hairline bg-darkroom-black cursor-pointer hover:border-darkroom-border transition-colors">
+<div class="flex items-center space-x-2.5">
+<input class="w-3.5 h-3.5 text-ember bg-darkroom-panel border-darkroom-border focus:ring-0 focus:ring-offset-0" name="render-quality" type="radio"/>
+<span class="text-xs text-warm-white font-medium">高清</span>
+</div>
+<span class="text-xs font-mono text-warm-dim">1600 · 约 2.5 分钟</span>
+</label>
+<!-- Item 4: 最高 -->
+<label class="flex items-center justify-between p-2.5 rounded-[4px] border border-darkroom-hairline bg-darkroom-black cursor-pointer hover:border-darkroom-border transition-colors">
+<div class="flex items-center space-x-2.5">
+<input class="w-3.5 h-3.5 text-ember bg-darkroom-panel border-darkroom-border focus:ring-0 focus:ring-offset-0" name="render-quality" type="radio"/>
+<span class="text-xs text-warm-white font-medium">最高</span>
+</div>
+<span class="text-xs font-mono text-warm-dim">不缩放 · 最清晰</span>
+</label>
+</div>
+</div>
+<!-- Image Mode Segmented Control -->
+<div class="space-y-2">
+<label class="block text-xs text-warm-dim">图像类型识别</label>
+<div class="grid grid-cols-3 gap-1 bg-darkroom-black p-1 rounded-[4px] border border-darkroom-hairline">
+<button class="py-1.5 text-xs text-center font-medium bg-darkroom-panel border border-ember text-warm-white rounded-[2px]" type="button">自动</button>
+<button class="py-1.5 text-xs text-center text-warm-dim hover:text-warm-white rounded-[2px] transition-colors" type="button">照片</button>
+<button class="py-1.5 text-xs text-center text-warm-dim hover:text-warm-white rounded-[2px] transition-colors" type="button">插画</button>
+</div>
+<p class="text-[11px] text-warm-dim leading-relaxed">小图会被自动放大 2 倍再描摹（轮廓更顺、色块更干净）</p>
+</div>
+<!-- Form Inputs: Title & Replay Duration -->
+<div class="space-y-3 pt-1 border-t border-darkroom-hairline">
+<div>
+<label class="block text-xs text-warm-dim mb-1" for="project-title">标题</label>
+<input class="w-full bg-darkroom-black border-darkroom-border rounded-[4px] px-3 py-1.5 text-xs text-warm-white focus:border-ember focus:ring-0 placeholder-warm-dim" id="project-title" type="text" value="走廊人像"/>
+</div>
+<div>
+<label class="block text-xs text-warm-dim mb-1" for="replay-seconds">回放时长（秒）</label>
+<input class="w-full bg-darkroom-black border-darkroom-border rounded-[4px] px-3 py-1.5 text-xs font-mono text-warm-white focus:border-ember focus:ring-0" id="replay-seconds" type="number" value="90"/>
+</div>
+</div>
+</div>
+<!-- Primary Action Trigger -->
+<div class="pt-4 border-t border-darkroom-hairline">
+<button class="w-full py-2.5 bg-ember hover:bg-ember-hover text-white font-medium text-sm tracking-wider rounded-[4px] transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-darkroom-panel focus:ring-ember flex items-center justify-center space-x-2" type="button">
+<span>开始生成</span>
+</button>
+</div>
+</aside>
+<!-- END: LeftControlPanel -->
+<!-- BEGIN: RightCanvasStage -->
+<section class="col-span-12 lg:col-span-8 xl:col-span-9 bg-darkroom-panel border border-darkroom-hairline rounded-[4px] flex flex-col justify-between overflow-hidden" data-purpose="artwork-stage">
+<!-- Status Header of Darkroom Stage -->
+<div class="px-5 py-3 border-b border-darkroom-hairline flex flex-wrap items-center justify-between gap-2 bg-darkroom-panel">
+<div class="flex items-center space-x-3">
+<span class="w-2 h-2 rounded-full bg-ember animate-pulse"></span>
+<span class="text-xs font-medium text-warm-white">描摹渲染中</span>
+<span class="text-darkroom-border">|</span>
+<span class="text-xs text-warm-dim">走廊人像 · 动态描摹画布</span>
+</div>
+<div class="text-xs font-mono text-warm-gray">
+            已绘制 <span class="text-warm-white font-semibold">128,430</span> / 172,471 笔 (74.5%)
+          </div>
+</div>
+<!-- Central Vector Tracing Artboard -->
+<div class="flex-1 p-4 sm:p-8 flex items-center justify-center bg-darkroom-black/60 relative overflow-hidden">
+<!-- Drawing Board Mat / Lamp Projection Area -->
+<div class="relative w-full max-w-[700px] aspect-[4/5] bg-darkroom-stage border border-darkroom-border rounded-[2px] overflow-hidden flex items-center justify-center shadow-none">
+<!-- Atmospheric Dark Ink Background Canvas -->
+<svg class="w-full h-full" fill="none" viewbox="0 0 800 1000" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<!-- Fine Tracing Grid Matrix -->
+<pattern height="40" id="tracing-grid" patternunits="userSpaceOnUse" width="40">
+<path d="M 40 0 L 0 0 0 40" fill="none" stroke="#231F1C" stroke-width="0.5"></path>
+</pattern>
+<!-- Warm Glow Accent -->
+<radialgradient cx="50%" cy="38%" id="lamp-center" r="65%">
+<stop offset="0%" stop-color="#2D231B" stop-opacity="0.8"></stop>
+<stop offset="70%" stop-color="#181513" stop-opacity="0.95"></stop>
+<stop offset="100%" stop-color="#12100E" stop-opacity="1"></stop>
+</radialgradient>
+</defs>
+<rect fill="url(#lamp-center)" height="1000" width="800"></rect>
+<rect fill="url(#tracing-grid)" height="1000" opacity="0.6" width="800"></rect>
+<!-- Mid-Trace Vector Illustration of the Corridor Portrait (Facets and Curves) -->
+<g id="rendered-polygons" opacity="0.92">
+<!-- Hallway Ambient Deep Walls (Vectorized geometric planar segments) -->
+<polygon fill="#1C1815" points="40,20 280,180 280,820 40,980" stroke="#2A241F" stroke-width="0.5"></polygon>
+<polygon fill="#241E19" points="280,180 370,240 370,760 280,820" stroke="#332B23" stroke-width="0.5"></polygon>
+<polygon fill="#201B17" points="520,240 610,180 610,820 520,760" stroke="#2E2721" stroke-width="0.5"></polygon>
+<polygon fill="#171412" points="610,180 760,20 760,980 610,820" stroke="#25201A" stroke-width="0.5"></polygon>
+<polygon fill="#3D2E20" opacity="0.75" points="370,240 430,240 430,760 370,760"></polygon>
+<!-- Floor planks rendered as vectorized perspective bands -->
+<polygon fill="#2A221C" points="40,980 280,820 370,760 430,760 520,760 610,820 760,980" stroke="#382E25" stroke-width="0.8"></polygon>
+<path d="M160 900 L325 790 M230 940 L345 775 M570 790 L640 900 M470 760 L480 840" stroke="#3F342B" stroke-width="0.75"></path>
+<!-- Woman's Dark Wool Coat (Completed Vector Color Blocks) -->
+<path d="M290 730 L360 480 L440 480 L510 730 L450 960 L350 960 Z" fill="#181716" stroke="#2D2824" stroke-width="0.5"></path>
+<polygon fill="#1D1B1A" points="360,480 400,530 400,740 330,750 310,680" stroke="#292623" stroke-width="0.5"></polygon>
+<polygon fill="#151413" points="440,480 400,530 400,740 470,750 490,680" stroke="#25221F" stroke-width="0.5"></polygon>
+<polygon fill="#141312" points="370,530 430,530 420,710 380,710" stroke="#2C2723" stroke-width="0.5"></polygon>
+<!-- Clapsed Hands (Vectorized Skin Tone Facets) -->
+<polygon fill="#6A4E3D" points="380,720 400,710 420,720 415,755 385,755" stroke="#87644F" stroke-width="0.5"></polygon>
+<polygon fill="#916B54" points="390,725 410,725 405,745 395,745"></polygon>
+<!-- Portrait Neck & Subtle Warm Amber Rim Light -->
+<polygon fill="#634533" points="385,465 415,465 418,510 382,510" stroke="#78553F" stroke-width="0.5"></polygon>
+<!-- Thin Gold Chain Accent -->
+<path d="M390 485 Q400 502 410 485" fill="none" stroke="#C29252" stroke-width="1"></path>
+<!-- Portrait Face: Mid-trace Faceted Vector Render -->
+<polygon fill="#8C654F" points="380,390 400,340 420,390 410,450 390,450" stroke="#AA7C63" stroke-width="0.5"></polygon>
+<polygon fill="#B28267" points="375,370 395,355 400,390 380,395" stroke="#C99477" stroke-width="0.5"></polygon>
+<!-- Warm Amber Rim Contouring Left Cheek & Nose -->
+<polygon fill="#D49B74" points="365,370 375,350 385,390 375,410" stroke="#E5AC84" stroke-width="0.5"></polygon>
+<polygon fill="#E8B28B" points="385,385 395,388 385,405"></polygon>
+<polygon fill="#583C2D" points="400,360 425,370 425,410 405,430" stroke="#6D4B38" stroke-width="0.5"></polygon>
+<!-- Textured Wavy Hair Blocks -->
+<path d="M360 350 C330 400 320 480 370 540 C350 490 355 420 370 370 Z" fill="#201A16" stroke="#332922" stroke-width="0.5"></path>
+<path d="M420 340 C460 380 470 460 440 520 C455 460 445 400 425 360 Z" fill="#1C1714" stroke="#2B221B" stroke-width="0.5"></path>
+<path d="M340 440 C330 480 340 520 365 545" fill="none" opacity="0.8" stroke="#7A563D" stroke-width="1.2"></path>
+</g>
+<!-- In-Progress Wireframe Stroke Trails (Wet Vector Drawing Simulation) -->
+<g fill="none" id="active-wireframe-passes" opacity="0.7" stroke="#A37E65" stroke-width="0.8">
+<path d="M 370 320 Q 400 290 430 330" stroke-dasharray="3 3"></path>
+<path d="M 345 360 C 330 385 325 410 320 450" stroke-dasharray="4 2"></path>
+<path d="M 430 330 Q 450 360 445 390" stroke-dasharray="2 2"></path>
+<path d="M 280 480 L 360 480" stroke-dasharray="5 3"></path>
+<path d="M 520 760 L 610 820" stroke="#52443A" stroke-dasharray="4 4"></path>
+<path d="M 280 820 L 370 760" stroke="#52443A" stroke-dasharray="4 4"></path>
+</g>
+<!-- Live Drawing Pen-Tip & Crosshair Position -->
+<g id="drawing-cursor" transform="translate(442, 388)">
+<circle class="animate-spin" cx="0" cy="0" fill="none" r="14" stroke="#E2603F" stroke-dasharray="2 2" stroke-width="0.75" style="animation-duration: 6s;"></circle>
+<line stroke="#E2603F" stroke-width="1.2" x1="-7" x2="7" y1="0" y2="0"></line>
+<line stroke="#E2603F" stroke-width="1.2" x1="0" x2="0" y1="-7" y2="7"></line>
+<circle cx="0" cy="0" fill="#E2603F" r="2.5"></circle>
+<!-- Subtle Pen Tail Vector Arc -->
+<path d="M 0 0 C 18 -15 35 -10 50 -25" fill="none" stroke="#E2603F" stroke-linecap="round" stroke-width="1.5"></path>
+</g>
+</svg>
+<!-- Floating Non-obtrusive Vector Coordinate Tag -->
+<div class="absolute bottom-3 right-3 font-mono text-[10px] text-warm-dim/80 bg-darkroom-black/90 px-2 py-0.5 rounded-[2px] border border-darkroom-border">
+              X: 442.0  Y: 388.5 · 贝塞尔闭合环路
+            </div>
+</div>
+</div>
+<!-- Replay Scrubber Control Bar -->
+<div class="px-5 py-3.5 border-t border-darkroom-hairline bg-darkroom-panel flex flex-col sm:flex-row items-center justify-between gap-4" data-purpose="replay-bar">
+<!-- Play / Pause & Timeline -->
+<div class="flex items-center space-x-4 w-full sm:w-auto flex-1 max-w-2xl">
+<!-- Pause Icon (Active drawing playback) -->
+<button class="w-8 h-8 shrink-0 flex items-center justify-center rounded-[3px] bg-darkroom-black border border-darkroom-border text-warm-white hover:border-ember transition-colors" type="button">
+<svg class="w-3.5 h-3.5 fill-current" viewbox="0 0 24 24">
+<rect height="14" rx="0.5" width="4" x="6" y="5"></rect>
+<rect height="14" rx="0.5" width="4" x="14" y="5"></rect>
+</svg>
+</button>
+<!-- Custom Timeline Track -->
+<div class="flex-1 relative flex items-center">
+<div class="w-full bg-darkroom-black h-1.5 rounded-[1px] relative overflow-hidden border border-darkroom-hairline">
+<div class="bg-ember h-full" style="width: 46.6%;"></div>
+</div>
+<!-- Scrubber Thumb -->
+<div class="absolute w-3.5 h-3.5 bg-ember rounded-full border border-darkroom-panel -ml-1.5 shadow-none pointer-events-none" style="left: 46.6%;"></div>
+</div>
+<!-- Monospace Timecode -->
+<span class="font-mono text-xs text-warm-white shrink-0 tracking-wider">00:42 / 01:30</span>
+</div>
+<!-- Secondary Timeline Controls (Speed & Zoom) -->
+<div class="flex items-center space-x-4 shrink-0">
+<!-- Speed Multiplier Group -->
+<div class="flex items-center bg-darkroom-black border border-darkroom-hairline rounded-[3px] p-0.5">
+<button class="px-2 py-0.5 text-[11px] font-mono text-warm-dim hover:text-warm-white" type="button">0.5x</button>
+<button class="px-2 py-0.5 text-[11px] font-mono bg-darkroom-panel text-ember font-medium rounded-[2px] border border-ember/40" type="button">1x</button>
+<button class="px-2 py-0.5 text-[11px] font-mono text-warm-dim hover:text-warm-white" type="button">2x</button>
+<button class="px-2 py-0.5 text-[11px] font-mono text-warm-dim hover:text-warm-white" type="button">4x</button>
+</div>
+<div class="h-3 w-[1px] bg-darkroom-border"></div>
+<!-- Scale Zoom Controls -->
+<div class="flex items-center space-x-1">
+<button class="w-7 h-6 flex items-center justify-center text-xs text-warm-dim bg-darkroom-black border border-darkroom-hairline rounded-[2px] hover:text-warm-white" type="button">-</button>
+<button class="px-2 h-6 flex items-center justify-center text-[11px] font-mono text-warm-white bg-darkroom-black border border-darkroom-hairline rounded-[2px]" type="button">1:1</button>
+<button class="w-7 h-6 flex items-center justify-center text-xs text-warm-dim bg-darkroom-black border border-darkroom-hairline rounded-[2px] hover:text-warm-white" type="button">+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- END: RightCanvasStage -->
+</div>
+<!-- BEGIN: BottomHistoryStrip -->
+<section class="bg-darkroom-panel border border-darkroom-hairline rounded-[4px] p-4" data-purpose="history-archive">
+<div class="flex items-center justify-between mb-3">
+<h2 class="font-serif text-xs font-semibold text-warm-white tracking-wide">生成历史</h2>
+<span class="text-[11px] font-mono text-warm-dim">共 4 份已归档矢量图形</span>
+</div>
+<!-- History Grid: 4 Static Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+<!-- History Item 1 -->
+<div class="flex items-center justify-between p-2.5 bg-darkroom-black border border-darkroom-hairline rounded-[3px] hover:border-darkroom-border transition-colors">
+<div class="flex items-center space-x-3 min-w-0">
+<!-- Vector Preview Graphic -->
+<div class="w-10 h-10 shrink-0 bg-darkroom-stage border border-darkroom-border rounded-[2px] p-1.5 flex items-center justify-center">
+<svg class="w-full h-full text-warm-dim" fill="none" stroke="currentColor" stroke-width="1.2" viewbox="0 0 24 24">
+<circle cx="12" cy="13" r="6"></circle>
+<path d="M8 8 L10 11 M16 8 L14 11"></path>
+<circle cx="10" cy="13" fill="currentColor" r="0.75"></circle>
+<circle cx="14" cy="13" fill="currentColor" r="0.75"></circle>
+</svg>
+</div>
+<div class="min-w-0">
+<p class="text-xs font-medium text-warm-white truncate">窗台猫咪</p>
+<p class="text-[10px] font-mono text-warm-dim mt-0.5 truncate">3 天前 · 84,120 笔 · 矢量文件</p>
+</div>
+</div>
+<!-- Download SVG Icon Button -->
+<button class="p-1.5 text-warm-dim hover:text-warm-white transition-colors shrink-0" title="下载 SVG" type="button">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewbox="0 0 24 24">
+<path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+</div>
+<!-- History Item 2 -->
+<div class="flex items-center justify-between p-2.5 bg-darkroom-black border border-darkroom-hairline rounded-[3px] hover:border-darkroom-border transition-colors">
+<div class="flex items-center space-x-3 min-w-0">
+<!-- Vector Preview Graphic -->
+<div class="w-10 h-10 shrink-0 bg-darkroom-stage border border-darkroom-border rounded-[2px] p-1.5 flex items-center justify-center">
+<svg class="w-full h-full text-warm-dim" fill="none" stroke="currentColor" stroke-width="1.2" viewbox="0 0 24 24">
+<rect height="12" rx="1" width="16" x="4" y="6"></rect>
+<path d="M4 14 L10 9 L15 13 L20 8"></path>
+</svg>
+</div>
+<div class="min-w-0">
+<p class="text-xs font-medium text-warm-white truncate">街角咖啡馆</p>
+<p class="text-[10px] font-mono text-warm-dim mt-0.5 truncate">5 天前 · 112,040 笔 · 矢量文件</p>
+</div>
+</div>
+<!-- Download SVG Icon Button -->
+<button class="p-1.5 text-warm-dim hover:text-warm-white transition-colors shrink-0" title="下载 SVG" type="button">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewbox="0 0 24 24">
+<path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+</div>
+<!-- History Item 3 -->
+<div class="flex items-center justify-between p-2.5 bg-darkroom-black border border-darkroom-hairline rounded-[3px] hover:border-darkroom-border transition-colors">
+<div class="flex items-center space-x-3 min-w-0">
+<!-- Vector Preview Graphic -->
+<div class="w-10 h-10 shrink-0 bg-darkroom-stage border border-darkroom-border rounded-[2px] p-1.5 flex items-center justify-center">
+<svg class="w-full h-full text-warm-dim" fill="none" stroke="currentColor" stroke-width="1.2" viewbox="0 0 24 24">
+<polygon points="5,19 12,5 19,19"></polygon>
+<line x1="8" x2="16" y1="14" y2="14"></line>
+</svg>
+</div>
+<div class="min-w-0">
+<p class="text-xs font-medium text-warm-white truncate">雨夜霓虹</p>
+<p class="text-[10px] font-mono text-warm-dim mt-0.5 truncate">上周 · 156,890 笔 · 矢量文件</p>
+</div>
+</div>
+<!-- Download SVG Icon Button -->
+<button class="p-1.5 text-warm-dim hover:text-warm-white transition-colors shrink-0" title="下载 SVG" type="button">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewbox="0 0 24 24">
+<path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+</div>
+<!-- History Item 4 -->
+<div class="flex items-center justify-between p-2.5 bg-darkroom-black border border-darkroom-hairline rounded-[3px] hover:border-darkroom-border transition-colors">
+<div class="flex items-center space-x-3 min-w-0">
+<!-- Vector Preview Graphic -->
+<div class="w-10 h-10 shrink-0 bg-darkroom-stage border border-darkroom-border rounded-[2px] p-1.5 flex items-center justify-center">
+<svg class="w-full h-full text-warm-dim" fill="none" stroke="currentColor" stroke-width="1.2" viewbox="0 0 24 24">
+<rect height="10" rx="1" width="14" x="5" y="8"></rect>
+<line x1="7" x2="17" y1="12" y2="12"></line>
+<line x1="7" x2="13" y1="15" y2="15"></line>
+<path d="M9 5 H15 V8 H9 Z"></path>
+</svg>
+</div>
+<div class="min-w-0">
+<p class="text-xs font-medium text-warm-white truncate">老式打字机</p>
+<p class="text-[10px] font-mono text-warm-dim mt-0.5 truncate">上周 · 94,300 笔 · 矢量文件</p>
+</div>
+</div>
+<!-- Download SVG Icon Button -->
+<button class="p-1.5 text-warm-dim hover:text-warm-white transition-colors shrink-0" title="下载 SVG" type="button">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewbox="0 0 24 24">
+<path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+</div>
+</div>
+</section>
+<!-- END: BottomHistoryStrip -->
+</main>
+<!-- END: WorkspaceContainer -->
+</body></html>

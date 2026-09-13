@@ -1,678 +1,1288 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>图片转 SVG · 逐笔绘制回放</title>
-<link rel="icon" href="favicon.ico" sizes="any">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>图片转 SVG · 取景器</title>
 <style>
-  :root{
-    --bg:#07070a; --panel:#131320; --panel2:#0d0d16; --line:#282842;
-    --gold:#c9a227; --text:#e9e9f2; --dim:#71718c; --ok:#3fb950; --err:#f85149;
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%}
-  body{
-    /* 渐变只铺首页那一屏，用 vh 绑定视口高度。
-       原来写死 900px，在手机这种长页面上尾巴会一直扫到页脚，
-       看起来就像页脚换了一块底色。 */
-    background:radial-gradient(120vw 56vh at 50% -6%,#16162a 0%,rgba(7,7,10,0) 70%),var(--bg);
-    background-attachment:fixed,scroll;
-    color:var(--text);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
-    -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;min-height:100%;
-  }
-  header{
-    padding:22px 20px 16px;border-bottom:1px solid var(--line);
-    background:linear-gradient(180deg,rgba(20,20,34,.9),rgba(13,13,22,.6));
-  }
-  .wrap{max-width:960px;margin:0 auto;width:100%}
-  h1{font-size:19px;font-weight:650;letter-spacing:.3px;display:flex;align-items:center;gap:10px}
-  h1 .dot{width:20px;height:20px;border-radius:6px;flex:0 0 auto;
-    background:linear-gradient(140deg,#ff9ec4,#c9a227 55%,#4fc3f7);box-shadow:0 0 14px rgba(201,162,39,.4)}
-  header p{color:var(--dim);font-size:12.5px;margin-top:7px}
-  main{flex:1 1 auto;padding:20px}
-  .grid{display:grid;gap:16px}
-  .col{display:grid;gap:16px;align-content:start;min-width:0}
+/* ============================================================
+   图片转 SVG · 取景器（Viewfinder）
+   零外部依赖：不加载任何框架 / 字体 / CDN。
+   视觉取自 Stitch「取景器」方案，功能与交互对齐 web/index.html。
+   ============================================================ */
+:root{
+  --graphite:#131316;
+  --surface:#18181C;
+  --surface-dim:#111114;
+  --surface-dark:#0D0D0F;
+  --hilite:#1F1F24;
+  --hilite-2:#222228;
+  --hairline:#26262B;
+  --hairline-soft:rgba(255,255,255,.06);
+  --btn:#F2F2F0;
+  --text:#EDEDED;
+  --text-2:#B4B4B9;
+  --muted:#8E8E93;
+  --dim:#82828A;      /* 原本是 #5E5E63：在四种深色底上实测只有 2.75~3.01:1，
+                         而它承载 12 处 9.5~11.5px 的说明文字，全域不达 AA。
+                         提到 #82828A 后约 4.9:1，与 --muted 仍留一档层次。 */
+  --ok:#8FA88C;
+  --err:#C98A84;
+  --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:Consolas,"Courier New","SF Mono",Menlo,monospace;
+  --r:2px;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  display:flex;flex-direction:column;overflow:hidden;
+  background:var(--graphite);color:var(--text);
+  font:400 13px/1.5 var(--sans);
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input{font:inherit}
+:focus-visible{outline:1px solid var(--btn);outline-offset:1px}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:var(--graphite)}
+::-webkit-scrollbar-thumb{background:#2E2E34;border-radius:2px}
+::-webkit-scrollbar-thumb:hover{background:#3C3C44}
+.mono{font-family:var(--mono)}
+/* 输入框必须显式声明可选中：.rail 和 footer.hist 上有 user-select:none，
+   子元素会继承它，于是鼠标拖不选标题和时长里的文字。 */
+input,textarea{user-select:text}
 
-  /* min-width:0 必须有：卡片是 grid 子项，默认 min-width:auto 会被内部的
-     「4 列按钮组」（small 上的 nowrap）撑住，撑破列宽、压到隔壁栏上 */
-  .card{min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
-  /* 触屏上 hover 会「粘住」，所以下面所有 hover 只对真鼠标生效 */
-  .card h2{font-size:13px;font-weight:600;color:var(--dim);letter-spacing:.6px;
-    text-transform:uppercase;margin-bottom:12px}
+/* ---------------- 顶栏 ---------------- */
+header.app{
+  height:48px;flex:0 0 48px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;background:var(--surface);border-bottom:1px solid var(--hairline);
+  user-select:none;z-index:20;gap:16px;
+}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand .mark{width:10px;height:10px;border:1px solid #fff;flex:0 0 auto}
+.brand h1{margin:0;font-size:13.5px;font-weight:500;letter-spacing:.02em;white-space:nowrap}
+.brand .sub{
+  font-size:11.5px;color:var(--muted);padding-left:14px;margin-left:4px;
+  border-left:1px solid var(--hairline);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.hstat{display:flex;align-items:center;gap:14px;font:400 11.5px var(--mono);flex:0 0 auto}
+.badge{
+  display:flex;align-items:center;gap:7px;padding:4px 10px;
+  border:1px solid var(--hairline);background:var(--graphite);border-radius:var(--r);
+  color:#C9C9CE;white-space:nowrap;
+}
+.badge .led{width:6px;height:6px;background:#8E8E93;flex:0 0 auto}
+.badge.on .led{background:#DADADD}
+.badge.err .led{background:var(--err)}
+.hstat .mem{color:var(--dim);font-size:11px}
 
-  /* 拖放区 */
-  #drop{
-    border:2px dashed var(--line);border-radius:12px;padding:40px 20px;text-align:center;
-    cursor:pointer;transition:border-color .15s,background .15s;background:var(--panel2)
-  }
-  #drop.over{border-color:var(--gold);background:#16162a}
-  #drop .big{font-size:15px;margin-bottom:6px}
-  #drop .sub{font-size:12px;color:var(--dim)}
-  /* 选好图之后把拖放区收成一条：大提示已经没用了，让缩略图当主角 */
-  #drop.hasfile{padding:15px 20px}
-  #drop.hasfile .big{font-size:13px;color:var(--dim);margin-bottom:0}
-  #drop.hasfile .sub,
-  #drop.hasfile .kbdhint{display:none}
-  #pick{display:none}
-  .kbdhint{display:none;margin-top:8px}
-  @media (hover:hover) and (pointer:fine){ .kbdhint{display:block} }
-  kbd{font:inherit;font-size:11px;padding:1px 5px;border:1px solid var(--line);
-    border-bottom-width:2px;border-radius:4px;background:var(--panel);color:var(--text)}
-  #thumb{max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--line);
-    margin:12px auto 0;display:none}
+/* ---------------- 主区 ---------------- */
+main{flex:1 1 auto;display:flex;overflow:hidden;min-height:0}
 
-  /* 选项 */
-  .opt{margin-bottom:14px}
-  .opt:last-child{margin-bottom:0}
-  .opt label{display:block;font-size:12.5px;color:var(--dim);margin-bottom:6px}
-  /* minmax(0,1fr)：让 4 列真的能等分收缩；写 1fr 的话列宽下限是内容最小宽度，列数一多就撑破卡片 */
-  .seg{display:grid;gap:7px;grid-template-columns:repeat(4,minmax(0,1fr))}
-  @media (max-width:760px){ .seg{grid-template-columns:repeat(2,1fr)} }
-  @media (max-width:380px){ .seg{grid-template-columns:1fr} }
-  .seg button{
-    font:inherit;font-size:13px;color:var(--text);text-align:center;
-    background:var(--panel2);border:1px solid var(--line);border-radius:8px;
-    padding:9px 8px;cursor:pointer;transition:background .12s,border-color .12s,color .12s;
-    line-height:1.35
-  }
-  .seg button small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .seg button.on{background:var(--gold);border-color:var(--gold);color:#1a1200;font-weight:650}
-  .seg button small{display:block;font-size:10.5px;opacity:.68;font-weight:400}
-  /* 档位下方的补充说明：与上方卡片同为 12px 内边距对齐，不用负边距 */
-  .seg-hint{display:none;margin-top:9px;padding:9px 12px;font-size:12px;line-height:1.6;
-    color:#e8c97a;background:#241b0b;border:1px solid #4a3a0e;border-radius:9px;
-    border-left:3px solid var(--gold)}
-  .seg-hint.show{display:block}
-  .seg-hint.muted{color:var(--dim);background:var(--panel2);
-    border-color:var(--line);border-left-color:#3a3a5e}
-  .row{display:flex;gap:12px;flex-wrap:wrap}
-  .row > *{flex:1 1 200px}
-  input[type=text],input[type=number]{
-    width:100%;font:inherit;font-size:13px;color:var(--text);background:var(--panel2);
-    border:1px solid var(--line);border-radius:8px;padding:9px 12px;outline:none
-  }
-  input:focus{border-color:var(--gold)}
+/* 左栏 */
+aside.rail{
+  width:370px;flex:0 0 370px;background:var(--graphite);
+  border-right:1px solid var(--hairline);
+  padding:18px 20px 16px;display:flex;flex-direction:column;
+  /* 整栏不滚动：让 .rail-top（参数区）自己滚，「开始生成」那一块常驻底部。
+     早先是整栏 overflow-y:auto，于是 1280×800 / 1366×768 这类常见窗口下
+     主按钮要滚 160~200px 才看得到 —— 打开页面第一眼找不到「开始生成」。 */
+  overflow:hidden;user-select:none;
+}
+.rail-top{display:flex;flex-direction:column;gap:18px;flex:1 1 auto;min-height:0;
+  overflow-y:auto;overflow-x:hidden;padding-right:2px}
+.grp{display:flex;flex-direction:column;gap:8px}
+.grp > .lbl{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.lbl .t{font-size:12px;color:var(--muted)}
+.lbl .x{font:400 10px var(--mono);color:var(--dim);letter-spacing:.06em}
 
-  .btn{font:inherit;font-size:14px;font-weight:600;border-radius:9px;border:1px solid;
-    padding:12px 20px;cursor:pointer;width:100%;transition:background .12s,opacity .12s}
-  .btn.primary{background:linear-gradient(180deg,#e0b83a,var(--gold));border-color:#a98a1c;color:#1a1200}
-  .btn:disabled{opacity:.42;cursor:not-allowed}
-  .btn.ghost{background:var(--panel2);border-color:var(--line);color:var(--text);font-weight:500}
+/* 源图卡 */
+.src{
+  display:flex;align-items:center;gap:12px;padding:8px;
+  border:1px solid var(--hairline);background:var(--surface);border-radius:var(--r);
+}
+.src .pic{
+  width:48px;height:64px;flex:0 0 auto;background:#000;
+  border:1px solid var(--hairline);overflow:hidden;
+}
+.src .pic img{width:100%;height:100%;object-fit:cover;display:block;filter:grayscale(30%) contrast(1.25)}
+.src .pic .ph{
+  width:100%;height:100%;display:grid;place-items:center;
+  color:var(--dim);font:400 16px var(--mono);
+}
+.src .meta{flex:1 1 auto;min-width:0}
+.src .name{font-size:12px;font-weight:500;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.src .dims{font:400 11px var(--mono);color:var(--muted);margin-top:2px}
+.src .tags{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
+.tag{
+  font:400 10px var(--mono);padding:2px 6px;border:1px solid var(--hairline);
+  background:var(--hilite);color:#9C9CA2;border-radius:1px;white-space:nowrap;
+}
+.tag.ok{color:var(--ok);border-color:#31402F}
 
-  /* 进度 */
-  #progWrap{display:none}
-  .bar{height:8px;border-radius:4px;background:#1e1e34;overflow:hidden;margin:12px 0 8px}
-  .bar i{display:block;height:100%;width:0;border-radius:4px;
-    background:linear-gradient(90deg,#7a6420,var(--gold));transition:width .25s ease}
-  .bar.indet i{width:35% !important;animation:slide 1.1s ease-in-out infinite}
-  @keyframes slide{0%{margin-left:-35%}100%{margin-left:100%}}
-  #status{font-size:12.5px;color:var(--dim);min-height:20px}
-  #log{
-    margin-top:10px;max-height:190px;overflow:auto;background:#0a0a12;border:1px solid var(--line);
-    border-radius:8px;padding:10px 12px;font:11.5px/1.75 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-    color:#9a9ab8;white-space:pre-wrap;word-break:break-all
-  }
-  .err{color:var(--err)}
-  .cacherow{display:flex;align-items:center;justify-content:space-between;
-    gap:10px;flex-wrap:wrap;margin-top:10px;padding-top:9px;border-top:1px solid #4a3c12}
-  #cacheInfo{font-size:12px}
-  #cacheInfo b{color:#f0d68a}
-  #clearCache{font:inherit;font-size:12px;color:#e8c97a;background:transparent;
-    border:1px solid #6b5416;border-radius:7px;padding:4px 10px;cursor:pointer}
-  #clearCache:disabled{opacity:.45;cursor:default}
-  .barinfo{font-size:11.5px;color:var(--dim);margin-top:6px}
-  .barinfo b{color:var(--gold)}
+.dropzone{
+  width:100%;padding:7px;border:1px dashed var(--hairline);border-radius:var(--r);
+  color:var(--muted);font-size:11.5px;text-align:center;transition:border-color .15s,color .15s,background .15s;
+}
+.dropzone:hover,.dropzone.over{border-color:#6E6E76;color:var(--text-2);background:#16161A}
 
-  /* 结果：手机上生成前整卡不显示（否则页面底部多一块空卡片）；
-     宽屏下由下面的媒体查询放开，空的时候当右栏的引导区 */
-  #outCard{display:none}
-  #outCard.hasResult{display:flex;flex-direction:column}
-  #result{display:none}
+/* 精细度 2×2 */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.opt{
+  position:relative;text-align:left;padding:8px;border:1px solid var(--hairline);
+  background:var(--surface);border-radius:var(--r);transition:border-color .15s,background .15s;
+}
+.opt:hover{background:#1C1C22}
+.opt .r1{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:12px;color:#C9C9CE}
+.opt .r1 .v{font:400 11px var(--mono);color:var(--muted)}
+.opt .r2{font-size:10.5px;color:var(--dim);margin-top:3px}
+.opt[aria-pressed="true"]{border-color:#fff;background:var(--hilite)}
+.opt[aria-pressed="true"] .r1{color:#fff;font-weight:500}
+.opt[aria-pressed="true"] .r1 .v{color:#DCDCE0}
+.opt[aria-pressed="true"] .r2{color:#A8A8AE}
+.opt[aria-pressed="true"]::after{
+  content:"";position:absolute;top:4px;right:4px;width:3px;height:3px;background:#fff;
+}
+.hint{font-size:10.5px;line-height:1.55;color:var(--dim);display:none}
+.hint.show{display:block}
 
-  /* 结果卡的空状态 —— 只在宽屏露脸，把右栏撑满 */
-  #emptyState{display:none;flex:1 1 auto;flex-direction:column;align-items:center;justify-content:center;
-    text-align:center;padding:34px 24px;gap:0;
-    border:2px dashed var(--line);border-radius:12px;background:var(--panel2)}
-  /* 与页头 h1 的方标同一套渐变，中间叠一个播放三角：这是「回放」要落地的位置 */
-  .es-logo{width:60px;height:60px;border-radius:18px;display:flex;align-items:center;justify-content:center;
-    background:linear-gradient(140deg,#ff9ec4,#c9a227 55%,#4fc3f7);box-shadow:0 0 26px rgba(201,162,39,.32)}
-  .es-title{font-size:15px;font-weight:600;margin-top:16px}
-  .es-desc{font-size:12.5px;color:var(--dim);margin-top:7px;line-height:1.7;max-width:340px}
-  .es-steps{display:flex;align-items:center;justify-content:center;gap:28px;
-    margin-top:26px;flex-wrap:wrap}
-  .es-steps span{position:relative;display:flex;align-items:center;gap:7px;
-    font-size:12.5px;color:var(--dim)}
-  .es-steps b{width:21px;height:21px;border-radius:50%;background:var(--gold);color:#1a1200;
-    font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center}
-  .es-steps span:not(:last-child)::after{content:"→";position:absolute;right:-20px;
-    color:#3a3a5e;font-size:12px}
-  .es-note{margin-top:18px;font-size:11.5px;color:#4a4a68}
-  .files{display:grid;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:12px}
-  .file{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px}
-  .file .n{font-size:12px;color:var(--dim)}
-  .file .s{font-size:17px;font-weight:650;margin:3px 0 9px}
-  .file a{display:block;text-align:center;text-decoration:none;font-size:13px;font-weight:600;
-    color:#1a1200;background:linear-gradient(180deg,#e0b83a,var(--gold));border:1px solid #a98a1c;
-    border-radius:8px;padding:9px}
-  .openbtn{
-    display:flex;align-items:center;gap:13px;text-decoration:none;
-    background:linear-gradient(135deg,#1c2b1e,#16241a);border:1px solid #2c5738;
-    border-radius:11px;padding:14px 18px;margin-bottom:12px;color:#d6f0dc;
-    transition:background .13s,border-color .13s,transform .1s
-  }
-  .openbtn:active{transform:translateY(1px)}
-  .openbtn .ar{font-size:19px;color:#5fd07a;line-height:1}
-  .openbtn b{display:block;font-size:14.5px;font-weight:650;color:#e6fbe9}
-  .openbtn small{display:block;font-size:11.5px;color:#7fa98a;margin-top:2px}
-  #frame{width:100%;height:520px;border:1px solid var(--line);border-radius:10px;background:#000}
-  .note{font-size:11.5px;color:var(--dim);margin-top:10px}
-  .warn{background:#2a1f0d;border:1px solid #6b5416;color:#e8c97a;border-radius:9px;
-    padding:10px 13px;font-size:12.5px;margin-bottom:14px}
-  /* 历史 */
-  #historyCard{display:none}
-  .hitop{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}
-  .hitop h2{margin:0}
-  .hitop .quota{font-size:11.5px;color:var(--dim)}
-  .hitop button{font:inherit;font-size:11.5px;color:var(--dim);background:none;
-    border:1px solid var(--line);border-radius:7px;padding:3px 9px;cursor:pointer}
-  .hitop button{margin-left:6px}
-  .hlist{display:grid;gap:10px}
-  .hitem{display:flex;gap:12px;align-items:center;background:var(--panel2);
-    border:1px solid var(--line);border-radius:10px;padding:10px}
-  .hitem img{width:62px;height:62px;object-fit:cover;border-radius:7px;flex:0 0 auto;
-    background:#0a0a12;border:1px solid var(--line)}
-  .hitem .meta{flex:1 1 auto;min-width:0}
-  .hitem .t{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .hitem .d{font-size:11.5px;color:var(--dim);margin-top:3px;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .hitem .acts{display:flex;gap:6px;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end}
-  .hitem .acts button{font:inherit;font-size:12px;color:var(--text);background:var(--panel);
-    border:1px solid var(--line);border-radius:7px;padding:6px 10px;cursor:pointer;white-space:nowrap}
-  .hitem .acts button.p{background:linear-gradient(180deg,#e0b83a,var(--gold));
-    border-color:#a98a1c;color:#1a1200;font-weight:600}
-  .hitem .acts button.del{color:var(--dim)}
-  .hempty{color:var(--dim);font-size:12.5px;padding:14px 2px;text-align:center}
-  /* 结果卡的空状态：只留一行淡淡的提示，不铺底色、不画框 ——
-     之前是「灰底 + 虚线框」的横条，在页面最底部看着像多出来一条灰条 */
-  .empty{color:var(--dim);font-size:12.5px}
-  @media (max-width:640px){
-    .hitem{flex-wrap:wrap}
-    .hitem .acts{width:100%;justify-content:flex-start}
-  }
+/* 三档分段 */
+.seg3{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:2px;
+  border:1px solid var(--hairline);background:var(--surface);border-radius:var(--r)}
+.seg3 button{padding:5px 4px;font-size:12px;color:var(--muted);text-align:center;
+  border-radius:1px;transition:color .15s,background .15s,border-color .15s;border:1px solid transparent}
+.seg3 button:hover{color:#fff}
+.seg3 button[aria-pressed="true"]{background:var(--hilite-2);border-color:rgba(255,255,255,.4);color:#fff;font-weight:500}
 
-  /* ============ PC / 宽屏适配 ============ */
-  @media (min-width:1060px){
-    .wrap{max-width:1240px}
-    main{padding:24px 28px}
-    /* 左栏 = 控制面板（选图 → 参数 → 生成），固定 480px；
-       右栏 = 输出（结果 → 历史），剩余宽度全给回放预览。
-       480px 是照「4 列按钮组 + 并排输入框」的最小宽度定的，改小参数卡的按钮文字会被截 */
-    .grid{grid-template-columns:480px minmax(0,1fr);gap:18px}
-    .col{gap:18px}
-    .warn{grid-column:1 / -1}
-    h1{font-size:21px}
-    header{padding:26px 28px 20px}
-    .card{padding:18px 20px;border-radius:13px}
-    input[type=text],input[type=number]{font-size:13.5px;padding:10px 13px}
-    #frame{height:min(72vh,660px)}
-    .files{grid-template-columns:1fr 1fr}
+/* 输入 */
+.fields{display:flex;flex-direction:column;gap:11px;padding-top:14px;border-top:1px solid var(--hairline)}
+.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+.field input{
+  width:100%;padding:6px 11px;background:var(--surface);border:1px solid var(--hairline);
+  border-radius:var(--r);color:#fff;font-size:12px;
+}
+.field input.mono{font-family:var(--mono)}
+.field input:focus{outline:none;border-color:#8E8E93}
 
-    /* 右栏铺满整列高，结果卡吃掉剩余高度：
-       生成前是一块引导区，不再是「左边一大条 + 右边一小截、剩下半屏空白」 */
-    .col-right{display:flex;flex-direction:column}
-    .col-right > #outCard{display:flex;flex-direction:column;flex:1 1 auto;min-height:360px}
-    #outCard:not(.hasResult) #emptyState{display:flex}
-  }
-  @media (min-width:1500px){
-    .wrap{max-width:1420px}
-    h1{font-size:23px}
-    #frame{height:min(76vh,760px)}
-  }
-  /* 有真鼠标时才给的反馈 */
-  @media (hover:hover) and (pointer:fine){
-    #drop{cursor:pointer}
-    #drop:hover{border-color:var(--gold);background:#16162a}
-    .seg button:hover{background:#1c1c30;border-color:#3a3a5e}
-    .btn.primary:hover:not(:disabled){background:linear-gradient(180deg,#f0c94a,#d9b02e)}
-    .btn.ghost:hover{background:#1c1c30}
-    #clearCache:hover{background:#3a2c0d}
-    .file a:hover{background:linear-gradient(180deg,#f0c94a,#d9b02e)}
-    .openbtn:hover{background:linear-gradient(135deg,#22361f,#1a2c1e);border-color:#3f7a4d}
-    .hitop button:hover{color:var(--err);border-color:#5a2a2a}
-    .hitop button#hPrune:hover{color:var(--gold);border-color:#6b5416}
-    .hitem .acts button:hover{background:#1c1c30;border-color:#3a3a5e}
-    .hitem .acts button.del:hover{color:var(--err);border-color:#5a2a2a}
-    .seg button:hover{background:#1c1c30;border-color:#3a3a5e}
-    button{transition:background .12s,border-color .12s,color .12s}
-  }
-  /* 键盘焦点可见（PC 上 tab 走查） */
-  :focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:6px}
+/* 运行时 / 缓存 */
+.runtime{border-top:1px solid var(--hairline);padding-top:12px}
+.rt-line{display:flex;align-items:flex-start;gap:8px;font:400 10.5px/1.6 var(--mono);color:var(--dim)}
+.rt-line .dot{width:5px;height:5px;flex:0 0 auto;margin-top:5px;background:var(--dim)}
+.rt-line.ok .dot{background:var(--ok)}
+.rt-line.ok{color:#9AA894}
+.rt-actions{display:flex;gap:8px;margin-top:8px}
+.ghost{
+  padding:4px 9px;border:1px solid var(--hairline);border-radius:var(--r);
+  font:400 10.5px var(--mono);color:var(--muted);transition:.15s;
+}
+.ghost:hover{border-color:#5A5A62;color:var(--text-2)}
+.ghost[disabled]{opacity:.45;cursor:default}
 
-  /* 页脚：不铺自己的底色，与页面同色，只用一条细线分隔 ——
-     之前给过 --panel2 的底色，反而与页面形成一块可见的色差 */
-  footer{padding:20px 20px 34px;color:var(--dim);font-size:12px;text-align:center;
-    border-top:1px solid rgba(40,40,66,.7)}
-  footer a{color:var(--gold);text-decoration:none}
+/* 生成按钮 + 进度 */
+.rail-bottom{flex:0 0 auto;padding-top:14px;border-top:1px solid var(--hairline);margin-top:14px}
+.btn-primary{
+  width:100%;padding:10px;background:var(--btn);color:var(--graphite);
+  font-size:12.5px;font-weight:500;letter-spacing:.03em;border-radius:var(--r);
+  display:flex;align-items:center;justify-content:center;gap:8px;transition:background .15s;
+}
+.btn-primary:hover{background:#fff}
+.btn-primary[disabled]{background:#2A2A30;color:#6E6E76;cursor:default}
+.btn-primary svg{width:12px;height:12px;fill:currentColor}
+.engine-note{margin-top:7px;text-align:center;font:400 10px var(--mono);color:var(--dim);letter-spacing:-.01em}
 
-  /* 全屏预览层：blob 链接在「新标签页」里打不开（Android WebView / VIA 等
-     调用系统内核的浏览器会得到空白页），改成页面内全屏 iframe ——
-     同一文档访问 blob，所有浏览器都稳 */
-  #preview{position:fixed;inset:0;z-index:999;display:none;flex-direction:column;background:#060608}
-  #preview.on{display:flex}
-  /* 顶栏只放「关闭」——作品名交给回放页自己的标题栏显示，避免出现两个标题 */
-  .pv-bar{display:flex;align-items:center;justify-content:flex-end;
-    padding:7px 12px;border-bottom:1px solid var(--line);
-    background:linear-gradient(180deg,rgba(20,20,34,.95),rgba(13,13,22,.75))}
-  #pvClose{font:inherit;font-size:12.5px;color:#e8c97a;background:transparent;
-    border:1px solid #6b5416;border-radius:7px;padding:5px 12px;cursor:pointer;flex:0 0 auto;
-    -webkit-tap-highlight-color:transparent}
-  #pvFrame{flex:1 1 auto;width:100%;border:0;background:#000}
-  @media (max-width:1059px){
-    .grid > .col{display:contents}      /* 窄屏：左列/右列的包裹不产生额外层级，卡片直接堆叠 */
+.prog{display:none;margin-top:12px}
+.prog.show{display:block}
+.pbar{height:2px;background:var(--hairline);overflow:hidden;border-radius:1px}
+.pbar i{display:block;height:100%;width:0;background:var(--btn);transition:width .25s}
+.pbar.indet i{width:32%;animation:slide 1.15s ease-in-out infinite}
+@keyframes slide{0%{transform:translateX(-105%)}100%{transform:translateX(320%)}}
+.pstatus{margin-top:8px;font:400 11.5px var(--mono);color:var(--text-2)}
+.pstatus .err{color:var(--err)}
+.pnet{margin-top:4px;font:400 10.5px/1.55 var(--mono);color:var(--dim)}
+.pnet b{color:var(--text-2);font-weight:400}
+.plog{
+  margin-top:8px;max-height:112px;overflow-y:auto;
+  font:400 10.5px/1.65 var(--mono);color:var(--dim);
+  border-left:1px solid var(--hairline);padding-left:9px;
+}
+.plog div{word-break:break-word}
+.plog .err{color:var(--err)}
+.plog .ok{color:var(--ok)}
+
+/* ---------------- 右栏（取景器舞台） ---------------- */
+section.stage{
+  flex:1 1 auto;min-width:0;background:var(--surface-dark);
+  display:flex;flex-direction:column;position:relative;overflow:hidden;
+}
+.hud{
+  height:40px;flex:0 0 40px;display:flex;align-items:center;justify-content:space-between;
+  gap:16px;padding:0 22px;border-bottom:1px solid var(--hairline);
+  background:rgba(17,17,20,.72);user-select:none;z-index:10;
+}
+.hud-l,.hud-r{display:flex;align-items:center;gap:14px;font:400 11px var(--mono);min-width:0}
+/* 左半边可收缩、右半边不收缩：窄屏（320~360）时优先保住「已绘制 N 笔」这组数字，
+   否则右半边会被挤出视口（实测 320 宽时 #hudPct 越界 28px）。 */
+.hud-l{flex:0 1 auto;overflow:hidden}
+.hud-r{flex:0 0 auto;min-width:0}
+.hud .k{color:#A8A8AE;font-weight:600;letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hud .sep{color:var(--hairline)}
+.hud .v{color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hud-r .n{color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hud-r .pc{color:#7C7C82;white-space:nowrap}
+@keyframes pulse{0%,100%{opacity:.9}50%{opacity:.2}}
+.pulse{width:6px;height:6px;background:#fff;flex:0 0 auto;animation:pulse 2s cubic-bezier(.4,0,.6,1) infinite}
+.pulse.idle{animation:none;opacity:.35;background:#8E8E93}
+
+.canvas-area{flex:1 1 auto;position:relative;overflow:hidden;min-height:0;display:flex;align-items:center;justify-content:center;padding:22px}
+
+/* 取景器四角括号 */
+.vf{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+.vf .cn{position:absolute;width:14px;height:14px;border:1.5px solid #E5E5E5;pointer-events:none;z-index:4}
+.vf .cn.tl{top:-1px;left:-1px;border-right:0;border-bottom:0}
+.vf .cn.tr{top:-1px;right:-1px;border-left:0;border-bottom:0}
+.vf .cn.bl{bottom:-1px;left:-1px;border-right:0;border-top:0}
+.vf .cn.br{bottom:-1px;right:-1px;border-left:0;border-top:0}
+
+/* 静态取景网格 + 中央十字 */
+.reticle{position:absolute;inset:0;pointer-events:none;opacity:.10;z-index:1}
+.reticle .h{position:absolute;top:50%;left:0;right:0;height:1px;background:#fff}
+.reticle .v{position:absolute;left:50%;top:0;bottom:0;width:1px;background:#fff}
+.reticle .cross{position:absolute;top:50%;left:50%;width:20px;height:20px;transform:translate(-50%,-50%)}
+.reticle .cross::before,.reticle .cross::after{content:"";position:absolute;background:rgba(255,255,255,.55)}
+.reticle .cross::before{top:50%;left:0;right:0;height:1px}
+.reticle .cross::after{left:50%;top:0;bottom:0;width:1px}
+.reticle.grid{
+  opacity:.05;
+  background-image:linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px);
+  background-size:40px 40px;background-position:center center;
+}
+
+/* 画面 */
+.viewport{position:relative;z-index:2;display:flex;align-items:center;justify-content:center;width:100%;height:100%;overflow:hidden}
+/* 画面槽必须自己有确定尺寸：只给 max-* 的话里面的 iframe 拿不到高度，
+   会退回 300x150 的默认尺寸（预览看起来就"很小"）。 */
+.viewport .slot{
+  position:relative;background:#f0f0f0;overflow:hidden;
+  border:1px solid var(--hairline);
+  width:100%;height:100%;
+  display:flex;align-items:center;justify-content:center;
+}
+.viewport .slot img{display:block;max-width:100%;max-height:100%}
+.viewport .slot iframe{display:block;width:100%;height:100%;border:0;background:#f0f0f0}
+
+/* 空态 */
+.empty{
+  position:relative;z-index:3;display:flex;flex-direction:column;align-items:center;
+  gap:14px;text-align:center;padding:26px;max-width:420px;
+}
+.empty .ico{
+  width:52px;height:52px;border:1px solid var(--hairline);display:grid;place-items:center;
+  background:var(--surface);border-radius:var(--r);
+}
+.empty .ico svg{width:22px;height:22px;fill:#5E5E63}
+.empty h2{margin:0;font-size:14px;font-weight:500;color:var(--text)}
+.empty p{margin:0;font-size:12px;color:var(--muted);line-height:1.7}
+.empty .steps{display:flex;gap:18px;margin-top:2px;font:400 10.5px var(--mono);color:var(--dim)}
+.empty .steps b{color:#9A9AA0;font-weight:400;margin-right:5px}
+.empty .foot{font:400 10.5px var(--mono);color:var(--dim);margin-top:2px}
+
+/* HUD 底部角标 */
+.corner-note{
+  position:absolute;bottom:8px;right:12px;z-index:5;
+  font:400 10px var(--mono);color:var(--dim);letter-spacing:.02em;
+  background:rgba(13,13,15,.72);padding:3px 7px;pointer-events:none;
+}
+.corner-note.left{left:12px;right:auto}
+
+/* 舞台底部工具条 */
+.tools{
+  flex:0 0 auto;border-top:1px solid var(--hairline);background:var(--surface-dim);
+  padding:11px 22px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+}
+.tbtn{
+  width:30px;height:28px;border:1px solid var(--hairline);border-radius:var(--r);
+  display:grid;place-items:center;color:var(--text-2);font-size:11px;transition:.15s;
+}
+.tbtn:hover{border-color:#5A5A62;color:#fff}
+.tbtn[disabled]{opacity:.35;cursor:default}
+.tbtn[disabled]:hover{border-color:var(--hairline);color:var(--text-2)}
+.track{flex:1 1 180px;min-width:120px;height:18px;display:flex;align-items:center;cursor:pointer}
+.track .rail3{position:relative;width:100%;height:2px;background:var(--hairline)}
+.track .rail3 i{position:absolute;inset:0 auto 0 0;width:0;background:#7C7C82}
+.track .rail3 b{position:absolute;top:50%;left:0;width:8px;height:8px;background:#fff;transform:translate(-50%,-50%)}
+.tc{font:400 11.5px var(--mono);color:var(--text-2);white-space:nowrap}
+.speeds{display:flex;border:1px solid var(--hairline);border-radius:var(--r);overflow:hidden}
+.speeds button{padding:5px 8px;font:400 10.5px var(--mono);color:var(--dim);border-right:1px solid var(--hairline)}
+.speeds button:last-child{border-right:0}
+.speeds button[aria-pressed="true"]{background:var(--hilite);color:#fff}
+.zoomgrp{display:flex;align-items:center;gap:4px}
+.zoomgrp .zlvl{
+  font:400 11px var(--mono);color:var(--text-2);min-width:42px;text-align:center;
+}
+.tbtn.wide{width:auto;padding:0 9px}
+.tbtn[aria-pressed="true"]{border-color:#6E6E76;color:#fff;background:var(--hilite)}
+.dl{display:flex;gap:7px;margin-left:auto;flex-wrap:wrap}
+.dl a{
+  display:inline-flex;align-items:center;gap:6px;padding:5px 11px;
+  border:1px solid var(--hairline);border-radius:var(--r);
+  color:var(--text-2);text-decoration:none;font-size:11.5px;transition:.15s;white-space:nowrap;
+}
+.dl a:hover{border-color:#6E6E76;color:#fff}
+.dl a.primary{background:var(--btn);color:var(--graphite);border-color:var(--btn);font-weight:500}
+.dl a.primary:hover{background:#fff}
+.dl a .sz{font:400 10px var(--mono);color:var(--dim)}
+.dl a.primary .sz{color:#5A5A5E}
+.dl a.off{opacity:.35;pointer-events:none}
+
+/* ---------------- 历史 ---------------- */
+footer.hist{
+  flex:0 0 auto;border-top:1px solid var(--hairline);background:var(--graphite);
+  padding:10px 20px 12px;user-select:none;
+}
+.hist-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px}
+.hist-head .l{display:flex;align-items:baseline;gap:10px;min-width:0}
+.hist-head .t{font:400 10.5px var(--mono);color:var(--dim);letter-spacing:.06em}
+.hist-head .q{font:400 10.5px var(--mono);color:var(--muted);white-space:nowrap}
+.hist-head .acts{display:flex;gap:7px;flex:0 0 auto}
+.hlist{display:flex;gap:10px;overflow-x:auto;padding-bottom:3px;min-height:74px}
+/* 用 <div role="button"> 而不是 <button>：原版每条历史有「预览 / ⬇SVG / ⬇HTML / 删除」
+   四个操作，而按钮不能嵌在按钮里（无效 HTML，读屏软件也会读乱）。 */
+.hitem{
+  flex:0 0 auto;width:168px;min-width:0;overflow:hidden;
+  border:1px solid var(--hairline);background:var(--surface);
+  border-radius:var(--r);padding:7px;display:flex;flex-direction:column;gap:7px;
+  position:relative;transition:border-color .15s;cursor:pointer;text-align:left;
+}
+.hitem:hover{border-color:#4A4A52}
+.hitem .row{display:flex;gap:8px;align-items:center;min-width:0}
+.hitem .th{width:34px;height:44px;flex:0 0 auto;background:#000;border:1px solid var(--hairline);overflow:hidden}
+.hitem .th img{width:100%;height:100%;object-fit:cover;display:block}
+.hitem .th .ph{width:100%;height:100%;display:grid;place-items:center;color:var(--dim);font:400 13px var(--mono)}
+.hitem .m{flex:1 1 auto;min-width:0}
+/* display:block 是必需的：这两个是 <span>，行内元素上的
+   overflow/text-overflow 不生效，长文件名会直接溢出卡片。 */
+.hitem .m .n{display:block;font-size:11.5px;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hitem .m .d{display:block;font:400 9.5px/1.5 var(--mono);color:var(--dim);
+  margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 三个操作并排常显（不再靠 hover 才出现）：和原版一样可以直接从历史里下载，
+   不必先把记录载入舞台再下载；触屏上也不会出现「找不到删除键」的问题。 */
+.hitem .acts{display:flex;gap:4px}
+.hitem .acts .a{
+  flex:1 1 0;min-width:0;padding:3px 0;border:1px solid var(--hairline);border-radius:1px;
+  background:transparent;color:var(--dim);font:400 9.5px var(--mono);cursor:pointer;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.hitem .acts .a:hover{background:#2A2A30;color:var(--text)}
+.hitem .acts .a.del:hover{color:var(--err)}
+.hist-empty{font:400 11px var(--mono);color:var(--dim);padding:20px 0;text-align:center;width:100%}
+/* 上游署名（MIT 许可要求保留） */
+.credit{margin-top:9px;padding-top:8px;border-top:1px solid var(--hairline);
+  font:400 10px/1.6 var(--mono);color:var(--dim);letter-spacing:.01em}
+.credit a{color:var(--muted);text-decoration:underline;text-underline-offset:2px}
+.credit a:hover{color:var(--text)}
+
+/* ---------------- 全屏预览层 ---------------- */
+#preview{
+  position:fixed;inset:0;z-index:100;background:#000;
+  display:none;flex-direction:column;
+}
+#preview.on{display:flex}
+.pv-bar{
+  flex:0 0 auto;height:40px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 14px;background:var(--surface);border-bottom:1px solid var(--hairline);
+}
+.pv-bar .t{font:400 11px var(--mono);color:var(--muted)}
+#pvFrame{flex:1 1 auto;width:100%;border:0;background:#000}
+
+/* ---------------- Toast ---------------- */
+#toast{
+  position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(10px);
+  background:var(--surface);border:1px solid var(--hairline);border-radius:var(--r);
+  padding:9px 15px;font-size:12px;color:var(--text);z-index:200;
+  opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;max-width:min(90vw,520px);
+}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.err{border-color:#5A3733;color:#E8B4AE}
+
+/* ---------------- 响应式 ---------------- */
+@media (max-width:1040px){
+  body{overflow:auto}
+  /* flex:0 0 auto 而不是原来的 flex:1 1 auto：窄屏是上下堆叠、整页滚动，
+     main 若仍被拉伸成「剩余高度」，内容一超出就会溢出去被 footer.hist 压住
+     （实测 420×880 下「开始生成」按钮被压掉 28px）。 */
+  main{flex:0 0 auto;flex-direction:column;overflow:visible}
+  aside.rail{
+    width:100%;flex:0 0 auto;border-right:0;border-bottom:1px solid var(--hairline);
+    overflow:visible;padding:16px;
   }
-  @media (max-width:640px){
-    .files{grid-template-columns:1fr}
-    main{padding:14px}
-    #frame{height:380px}
-    h1{font-size:16px}
-  }
+  /* 窄屏是整页滚动，参数区不该再自己滚一层（否则手机上会出现「滚动套滚动」） */
+  .rail-top{overflow:visible}
+  section.stage{min-height:62vh}
+  .canvas-area{padding:16px}
+  .hud{padding:0 14px;gap:10px}
+  .hud .v.hide-sm{display:none}  .brand .sub{display:none}
+  .tools{padding:10px 14px;gap:10px}
+  .dl{margin-left:0;width:100%}
+  .dl a{flex:1 1 auto;justify-content:center}
+  footer.hist{padding:10px 14px 12px}
+}
+@media (max-width:520px){
+  /* 手机上 HUD 一行放不下三组信息，百分比先让位（笔数更有用），
+     同时收紧内边距和间距，保证 320 宽的屏也不越界。 */
+  .hud{padding:0 12px;gap:8px}
+  .hud-l,.hud-r{gap:8px}
+  .hud-r .pc{display:none}
+}
+@media (max-height:820px){
+  /* 窗口不高时（1280×800 / 1366×768 这类常见笔记本），左栏参数区会被进度区挤到
+     只剩 ~300px。收紧日志高度，把空间还给参数。 */
+  .plog{max-height:60px}
+  .rail-top{gap:13px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+}
 </style>
 </head>
 <body>
 
-<header>
-  <div class="wrap">
-    <h1><span class="dot"></span>图片转 SVG · 逐笔绘制回放</h1>
-    <p>把一张图片变成矢量 SVG + 一个能回放整个作画过程的网页。全部在你的浏览器里完成，图片不会上传到任何服务器。</p>
+<!-- ======================= 顶栏 ======================= -->
+<header class="app">
+  <div class="brand">
+    <span class="mark"></span>
+    <h1>图片转 SVG</h1>
+    <span class="sub">把照片变成矢量 SVG，并回放整个作画过程 · 全部在你的浏览器里完成，图片不上传</span>
+  </div>
+  <div class="hstat">
+    <div class="badge" id="engineBadge"><span class="led"></span><span id="engineText">运行时未就绪</span></div>
+    <span class="mem" id="memText"></span>
   </div>
 </header>
 
+<!-- ======================= 主区 ======================= -->
 <main>
-  <div class="wrap grid">
+  <!-- ---------- 左栏 ---------- -->
+  <aside class="rail">
+    <div class="rail-top">
 
-    <div class="warn" id="bootWarn" style="grid-column:1/-1">
-      ⏳ 首次使用需要下载约 21 MB 的 Python 运行时（含 OpenCV），请耐心等待一次。
-      <div class="cacherow">
-        <span id="cacheInfo">正在检查本地缓存…</span>
-        <button id="clearCache" type="button">清除运行时缓存</button>
-      </div>
-    </div>
+      <!-- 输入图像 -->
+      <div class="grp">
+        <div class="lbl"><span class="t">输入图像</span>
+          <span class="x" id="srcTag"></span></div>
 
-    <!-- 左列：选图 + 参数 -->
-    <div class="col">
-    <!-- 1 选图 -->
-    <div class="card">
-      <h2>1 · 选择图片</h2>
-      <div id="drop" tabindex="0" role="button" aria-label="选择图片：点击或按回车打开文件选择器，也可以直接把图片拖进来">
-        <div class="big">拖一张图片到这里，或点击选择</div>
-        <div class="sub">首选 JPG / PNG · 手机建议选「标准」档以下，超大图可能因内存不足失败</div>
-        <div class="sub kbdhint">键盘：<kbd>Enter</kbd> 选图 · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> 开始生成</div>
-      </div>
-      <input type="file" id="pick" accept="image/*">
-      <img id="thumb" alt="预览">
-    </div>
-
-    <!-- 2 选项 -->
-    <div class="card">
-      <h2>2 · 参数</h2>
-
-      <div class="opt">
-        <label>清晰度（越大越清晰，也越慢）</label>
-        <div class="seg" id="segSize">
-          <button data-w="800">快速<small>800 · 约 1 分钟</small></button>
-          <button data-w="1200" class="on">标准<small>1200 · 约 1.5 分钟</small></button>
-          <button data-w="1600">高清<small>1600 · 约 2.5 分钟</small></button>
-          <button data-w="0">最高<small>不缩放 · 最清晰</small></button>
+        <div class="src">
+          <div class="pic" id="picBox">
+            <div class="ph" id="picPh">▣</div>
+          </div>
+          <div class="meta">
+            <div class="name" id="srcName">尚未选择图片</div>
+            <div class="dims" id="srcDims">—</div>
+            <div class="tags" id="srcTags"></div>
+          </div>
         </div>
-        <div class="seg-hint" id="maxHint">
+
+        <button class="dropzone" id="drop" type="button"
+          aria-label="选择图片：点击或按回车打开文件选择器，也可以把图片拖进来">
+          ＋ 点击更换或拖入其他图片
+        </button>
+        <input type="file" id="pick" accept="image/*" hidden>
+      </div>
+
+      <!-- 矢量精细度 -->
+      <div class="grp">
+        <div class="lbl"><span class="t">矢量精细度</span><span class="x">采样网格</span></div>
+        <div class="grid2" id="segSize" role="group" aria-label="矢量精细度">
+          <button class="opt" data-w="800" aria-pressed="false">
+            <span class="r1"><span>快速</span><span class="v">800</span></span>
+            <span class="r2">约 1 分钟</span>
+          </button>
+          <button class="opt" data-w="1200" aria-pressed="true">
+            <span class="r1"><span>标准</span><span class="v">1200</span></span>
+            <span class="r2">约 1.5 分钟</span>
+          </button>
+          <button class="opt" data-w="1600" aria-pressed="false">
+            <span class="r1"><span>高清</span><span class="v">1600</span></span>
+            <span class="r2">约 2.5 分钟</span>
+          </button>
+          <button class="opt" data-w="0" aria-pressed="false">
+            <span class="r1"><span>最高</span><span class="v">原样</span></span>
+            <span class="r2">不缩放 · 最清晰</span>
+          </button>
+        </div>
+        <div class="hint" id="maxHint">
           按原始尺寸描摹：4000px 的图约 4 分钟，产物可能超过 50 MB，手机浏览器可能因内存不足失败。
         </div>
       </div>
 
-
-      <div class="opt">
-        <label>图片类型（影响是否先放大会降噪）</label>
-        <div class="seg" id="segType">
-          <button data-v="auto" class="on">自动<small>小图自动放大</small></button>
-          <button data-v="none">照片<small>原样描摹</small></button>
-          <button data-v="illust">插画<small>放大 + 降噪</small></button>
+      <!-- 样式分类器 -->
+      <div class="grp">
+        <div class="lbl"><span class="t">样式分类器</span><span class="x">预处理</span></div>
+        <div class="seg3" id="segType" role="group" aria-label="图片类型">
+          <button data-v="auto" aria-pressed="true">自动</button>
+          <button data-v="none" aria-pressed="false">照片</button>
+          <button data-v="illust" aria-pressed="false">插画</button>
         </div>
-        <div class="seg-hint show muted">
-          小图会被自动放大 2 倍再描摹（轮廓更顺、色块更干净）。
-        </div>
+        <div class="hint show" id="typeHint">小图会被自动放大 2 倍再描摹（轮廓更顺、色块更干净）。</div>
       </div>
 
-      <div class="row">
-        <div class="opt">
-          <label>标题（显示在回放页顶部）</label>
+      <!-- 标题 / 时长 -->
+      <div class="fields">
+        <div class="field">
+          <label for="title">标题</label>
           <input type="text" id="title" placeholder="我的作品" maxlength="60">
         </div>
-        <div class="opt">
-          <label>回放时长（秒，1× 速度）</label>
-          <input type="number" id="duration" value="90" min="10" max="600" step="10">
+        <div class="field">
+          <label for="duration">回放时长（秒，1× 速度）</label>
+          <input type="number" id="duration" class="mono" value="90" min="10" max="600" step="10">
         </div>
+      </div>
+
+      <!-- 运行时 -->
+      <div class="runtime">
+        <div class="rt-line" id="rtLine"><span class="dot"></span>
+          <span id="rtText">正在检查本地运行时…</span></div>
+        <div class="rt-actions">
+          <button class="ghost" id="clearCache" type="button" disabled>清除运行时缓存</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 生成 -->
+    <div class="rail-bottom">
+      <button class="btn-primary" id="go" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="5,3 19,12 5,21"/></svg>
+        <span id="goText">开始生成</span>
+      </button>
+      <div class="engine-note" id="engineNote">ENGINE: LOCAL · WASM · NO UPLOAD</div>
+
+      <div class="prog" id="progWrap">
+        <div class="pbar" id="bar"><i id="barFill"></i></div>
+        <div class="pstatus" id="status" role="status" aria-live="polite">准备中…</div>
+        <div class="pnet" id="netInfo"></div>
+        <div class="plog" id="log"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ---------- 右栏：取景器舞台 ---------- -->
+  <section class="stage">
+    <div class="hud">
+      <div class="hud-l">
+        <span class="k" id="hudMode">VIEWFINDER // IDLE</span>
+        <span class="sep">|</span>
+        <span class="v hide-sm" id="hudSpec">SOURCE —</span>
+        <span class="sep hide-sm">|</span>
+        <span class="v hide-sm" id="hudCanvas">CANVAS —</span>
+      </div>
+      <div class="hud-r">
+        <span class="pulse idle" id="hudPulse"></span>
+        <span class="n" id="hudCount" aria-live="polite">等待输入</span>
+        <span class="pc" id="hudPct"></span>
       </div>
     </div>
 
-    <!-- 3 生成 -->
-    <div class="card">
-      <h2>3 · 生成</h2>
-      <button class="btn primary" id="go" disabled>开始生成</button>
+    <div class="canvas-area">
+      <div class="vf">
+        <span class="cn tl"></span><span class="cn tr"></span>
+        <span class="cn bl"></span><span class="cn br"></span>
 
-      <div id="progWrap">
-        <div class="bar" id="bar"><i id="barFill"></i></div>
-        <div id="status">准备中…</div>
-        <div class="barinfo" id="netInfo"></div>
-        <div id="log"></div>
-      </div>
+        <div class="reticle grid" id="reticle"><span class="cross"></span></div>
 
-    </div><!-- /生成卡 -->
-
-    </div><!-- /左列 -->
-
-    <!-- 右列：结果 + 历史 -->
-    <div class="col col-right">
-
-    <!-- 4 结果（手机上生成前不显示，避免底部多出一块空卡片；宽屏下始终显示，
-         没结果的时候当右栏的引导区，把整栏填满） -->
-    <div class="card" id="outCard">
-      <h2>4 · 结果</h2>
-
-      <div id="emptyState">
-        <div class="es-logo" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="26" height="26"><path
-            d="M9.5 7.2v9.6a.8.8 0 0 0 1.22.68l7.6-4.8a.8.8 0 0 0 0-1.36l-7.6-4.8A.8.8 0 0 0 9.5 7.2Z"
-            fill="#1a1200"/></svg>
-        </div>
-        <div class="es-title">生成的作品会出现在这里</div>
-        <div class="es-desc">逐笔回放预览、SVG 与 HTML 的下载入口，都在这栏。</div>
-        <div class="es-steps">
-          <span><b>1</b>选图</span>
-          <span><b>2</b>调参数</span>
-          <span><b>3</b>开始生成</span>
-        </div>
-        <div class="es-note">生成大约需要 1～3 分钟 · 进度显示在左侧「3 · 生成」栏</div>
-      </div>
-
-      <div id="result">
-        <a id="openHtml" class="openbtn" target="_blank" rel="noopener">
-          <span class="ar">▶</span>
-          <span><b>全屏预览回放页</b><small>全屏播放绘制过程（下载后可以发给别人）</small></span>
-        </a>
-
-        <div class="files">
-          <div class="file">
-            <div class="n">SVG 矢量图</div>
-            <div class="s" id="szSvg">—</div>
-            <a id="dlSvg" download>⬇ 下载 .svg</a>
+        <!-- 空态 -->
+        <div class="empty" id="emptyState">
+          <div class="ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M9.5 7.2v9.6a.8.8 0 0 0 1.22.68l7.6-4.8a.8.8 0 0 0 0-1.36l-7.6-4.8A.8.8 0 0 0 9.5 7.2Z"/></svg>
           </div>
-          <div class="file">
-            <div class="n">回放网页</div>
-            <div class="s" id="szHtml">—</div>
-            <a id="dlHtml" download>⬇ 下载 .html</a>
+          <h2>生成的作品会出现在这里</h2>
+          <p>逐笔回放预览、SVG 与 HTML 的下载入口，都在这一区。<br>生成大约需要 1～3 分钟。</p>
+          <div class="steps"><span><b>01</b>选图</span><span><b>02</b>调参数</span><span><b>03</b>开始生成</span></div>
+          <div class="foot" id="emptyFoot">键盘：Enter 选图 · Ctrl+Enter 开始生成</div>
+        </div>
+
+        <!-- 画面槽 -->
+        <div class="viewport" id="viewport" style="display:none">
+          <div class="slot" id="slot">
+            <img id="thumb" alt="已选图片预览">
+            <iframe id="frame" title="回放预览" style="display:none"></iframe>
           </div>
         </div>
-        <div class="note" id="doneNote"></div>
-        <div class="note">↓ 也可以就在下面直接播放</div>
-        <iframe id="frame" title="回放预览"></iframe>
-      </div>
-    </div><!-- /outCard -->
 
-    <!-- 4 历史 -->
-    <div class="card" id="historyCard">
-      <div class="hitop">
-        <h2>5 · 生成历史</h2>
-        <div>
-          <span class="quota" id="hQuota"></span>
-          <button id="hPrune" title="按体积上限清理最旧的记录">清理空间</button>
-          <button id="hClear">全部清空</button>
-        </div>
+        <div class="corner-note left" id="noteLeft" style="display:none"></div>
+        <div class="corner-note" id="noteRight" style="display:none"></div>
       </div>
-      <div class="hlist" id="hList"></div>
     </div>
 
-    </div><!-- /右列 -->
-  </div>
+    <!-- 底部工具条 -->
+    <div class="tools">
+      <button class="tbtn" id="playBtn" title="播放 / 暂停" aria-label="播放" disabled>❚❚</button>
+      <div class="track" id="track" role="slider" aria-label="回放进度"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+        <div class="rail3"><i id="fillBar"></i><b id="knob"></b></div>
+      </div>
+      <span class="tc" id="tc">00:00 / 00:00</span>
+      <div class="speeds" id="speeds" role="group" aria-label="倍速">
+        <button data-s="0.5" aria-pressed="false">0.5×</button>
+        <button data-s="1" aria-pressed="true">1×</button>
+        <button data-s="2" aria-pressed="false">2×</button>
+        <button data-s="4" aria-pressed="false">4×</button>
+      </div>
+      <!-- 缩放 / 对照：指令下发到回放页（也在回放页内独立可用）。
+           按钮只有符号，title 不能当可访问名用，所以另给 aria-label。 -->
+      <div class="zoomgrp" id="zoomGrp">
+        <button class="tbtn" id="zOut" title="缩小（回放页内滚轮 / 双指捏合同样可用）" aria-label="缩小">−</button>
+        <span class="zlvl" id="zLvl">100%</span>
+        <button class="tbtn" id="zIn" title="放大" aria-label="放大">＋</button>
+        <button class="tbtn" id="zFit" title="适应窗口（回放页内按 0）" aria-label="适应窗口">⤢</button>
+        <button class="tbtn" id="zRst" title="实际大小（回放页内按 1）" aria-label="实际大小">1:1</button>
+        <button class="tbtn wide" id="ghostBtn2" title="显示 / 隐藏原图对照" aria-pressed="true">对照</button>
+      </div>
+      <div class="dl">
+        <!-- 点击由脚本改走页内 srcdoc 预览层（blob URL 在 Android WebView 的新标签里是空白页），
+             target=_blank 是原版为桌面留的兜底：Ctrl/中键、右键「在新标签页打开」仍可用。 -->
+        <a id="openHtml" class="primary off" href="#" role="button" target="_blank" rel="noopener" aria-disabled="true">▶ 全屏预览</a>
+        <a id="dlSvg" class="off" download aria-disabled="true">⬇ SVG <span class="sz" id="szSvg">—</span></a>
+        <a id="dlHtml" class="off" download aria-disabled="true">⬇ 回放页 <span class="sz" id="szHtml">—</span></a>
+      </div>
+    </div>
+  </section>
 </main>
 
-<!-- 全屏预览层：blob 链接在「新标签页」里打不开（Android WebView / VIA 等
-     调用系统内核的浏览器会得到空白页），这里改成页面内全屏 iframe ——
-     同一文档访问 blob，所有浏览器都稳，桌面端也少开一个标签页 -->
-<div id="preview">
-  <div class="pv-bar">
-    <button id="pvClose" type="button">✕ 关闭</button>
+<!-- ======================= 生成历史 ======================= -->
+<footer class="hist">
+  <div class="hist-head">
+    <div class="l">
+      <span class="t">HISTORY // 生成历史</span>
+      <span class="q" id="hQuota"></span>
+    </div>
+    <div class="acts">
+      <button class="ghost" id="hPrune" title="按体积上限清理最旧的记录">清理空间</button>
+      <button class="ghost" id="hClear">全部清空</button>
+    </div>
   </div>
-  <iframe id="pvFrame" title="回放预览"></iframe>
-</div>
-
-<footer>
-  <div class="wrap">
-    基于 <a href="https://github.com/VanemKrAu/photo-to-svg" target="_blank" rel="noopener">photo-to-svg</a> ·
-    算法来自 <a href="https://github.com/AvroraCL/image-to-css-art" target="_blank" rel="noopener">AvroraCL/image-to-css-art</a>（MIT）·
-    浏览器端由 Pyodide 驱动
+  <div class="hlist" id="hList"></div>
+  <!-- 上游署名不能省：image-to-css-art 是 MIT，许可证要求保留版权与许可声明。
+       这里的 <a> 只是文本链接，不加载任何外部资源，不违反「零外部依赖」。 -->
+  <div class="credit">
+    基于 <a href="https://github.com/AvroraCL/image-to-css-art" target="_blank" rel="noopener">AvroraCL/image-to-css-art</a>（MIT 许可）
+    · 本页为 photo-to-svg 的 SVG 输出扩展
+    · 运行时由 <a href="https://pyodide.org" target="_blank" rel="noopener">Pyodide</a> 在浏览器本地执行 Python，图片不上传
   </div>
 </footer>
 
+<!-- ======================= 全屏预览层 ======================= -->
+<div id="preview" role="dialog" aria-modal="true" aria-label="回放全屏预览" tabindex="-1">
+  <div class="pv-bar">
+    <span class="t">REPLAY // 全屏预览</span>
+    <button class="ghost" id="pvClose" type="button">✕ 关闭（Esc）</button>
+  </div>
+  <iframe id="pvFrame" title="回放全屏预览"></iframe>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
 <script>
 (function(){
-  "use strict";
+"use strict";
 
-  const $ = (id) => document.getElementById(id);
-  const drop = $('drop'), pick = $('pick'), thumb = $('thumb'), go = $('go');
-  const bar = $('bar'), barFill = $('barFill'), status = $('status'), logEl = $('log');
+const $ = (id) => document.getElementById(id);
 
-  let file = null, worker = null, ready = false, busy = false;
-  let lastHtmlText = '';   // 最近一次生成的回放页源码（预览用 srcdoc，见 openPreview）
+/* ---------------- 元素 ---------------- */
+const drop = $('drop'), pick = $('pick'), thumb = $('thumb'), go = $('go'), goText = $('goText');
+const bar = $('bar'), barFill = $('barFill'), statusEl = $('status'), logEl = $('log');
+const hudMode = $('hudMode'), hudSpec = $('hudSpec'), hudCanvas = $('hudCanvas');
+const hudCount = $('hudCount'), hudPct = $('hudPct'), hudPulse = $('hudPulse');
+const emptyState = $('emptyState'), viewport = $('viewport'), slot = $('slot');
+const noteLeft = $('noteLeft'), noteRight = $('noteRight');
+const frame = $('frame'), preview = $('preview'), pvFrame = $('pvFrame');
 
-  /* ---------- 选项 ---------- */
-  function seg(id, cb){
-    const box = $(id);
-    box.addEventListener('click', (e) => {
-      const b = e.target.closest('button');
-      if(!b) return;
-      box.querySelectorAll('button').forEach(x => x.classList.remove('on'));
-      b.classList.add('on');
-      cb(b.dataset.w ?? b.dataset.v);
-    });
+/* ---------------- 状态 ---------------- */
+let file = null, worker = null, ready = false, busy = false;
+let lastHtmlText = '';                 // 最近一次生成的回放页源码（预览走 srcdoc）
+let mockMode = false;                  // true = 没有 worker.js，用内置模拟器
+let replay = { playing: false, t: 0, total: 90, speed: 1 };  // 回放控制条状态
+let tickTimer = null;
+
+/* ---------------- 工具 ---------------- */
+/* 回放时长钳到 [10,600]：输入框的 min/max 只管住微调箭头，
+   手键 -5 或 99999 会原样传给 worker 并写进回放页 DUR，
+   回放页的 t/DUR*100、draw=t/DUR*N 随即算出负值或巨值。 */
+function clampDuration(v){
+  // 用 parseFloat 而不是 parseInt：输入「1e3」时 parseInt 只读到 1，
+  // 一钳就变成 10 秒 —— 用户看着输入框写着 1e3，却得到一个 10 秒的回放。
+  const n = parseFloat(v);
+  if(!Number.isFinite(n)) return 90;
+  return Math.round(Math.min(600, Math.max(10, n)));
+}
+function fmtSize(n){
+  if(n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+  if(n >= 1024) return (n / 1024).toFixed(0) + ' KB';
+  return n + ' B';
+}
+function fmtTime(ms){
+  const d = new Date(ms), now = Date.now();
+  const p = (x) => String(x).padStart(2, '0');
+  const hm = p(d.getHours()) + ':' + p(d.getMinutes());
+  if(now - ms < 86400000) return '今天 ' + hm;
+  if(now - ms < 172800000) return '昨天 ' + hm;
+  return (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + hm;
+}
+function mmss(s){
+  s = Math.max(0, Math.round(s));
+  return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+}
+let toastTimer = null;
+function toast(msg, isErr){
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.toggle('err', !!isErr);
+  t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('on'), isErr ? 4200 : 2600);
+}
+
+/* ---------------- HUD ---------------- */
+function setHud(mode, spec, canvas){
+  if(mode !== undefined) hudMode.textContent = mode;
+  if(spec !== undefined) hudSpec.textContent = spec;
+  if(canvas !== undefined) hudCanvas.textContent = canvas;
+}
+let estTotal = 0;          // 本次生成的总笔数（未知时为 0，不编分母）
+function setProgressUI(frac){
+  const p = Math.max(0, Math.min(1, frac));
+  if(estTotal > 0){
+    hudCount.textContent = '已绘制 ' + Math.round(p * estTotal).toLocaleString() +
+                           ' / ' + estTotal.toLocaleString() + ' 笔';
+  } else {
+    hudCount.textContent = '生成中 ' + (p * 100).toFixed(0) + '%';
   }
-  /* 初值必须和界面上默认选中的按钮一致（「标准」= 1200）——
-     之前写的是 800，用户看着「标准」已选中、实际却按 800px 跑，
-     出图细节少还没线索（画布尺寸才看得出来） */
-  let maxWidth = '1200', preprocess = 'auto';
-  seg('segSize', v => {
-    maxWidth = v;
-    // 「最高」档才会慢/大，把提示显出来
-    $('maxHint').classList.toggle('show', v === '0');
-  });
-  seg('segType', v => { preprocess = v; });
+  hudPct.textContent = '(' + (p * 100).toFixed(1) + '%)';
+  hudPulse.classList.toggle('idle', p <= 0 || p >= 1);
+}
+/* 回放进度专用（本地兜底 tick 走这条）。
+   不能复用 setProgressUI：那条路径在 estTotal>0 时会把比例折算成「已绘制 N 笔」，
+   而 estTotal 是「生成」的总笔数 —— 时间比例乘出来的笔数是编的，不是真实回放进度。 */
+function setReplayHud(frac){
+  const p = Math.max(0, Math.min(1, frac));
+  hudCount.textContent = '回放 ' + (p * 100).toFixed(0) + '%';
+  hudPct.textContent = '(' + (p * 100).toFixed(1) + '%)';
+  hudPulse.classList.toggle('idle', p <= 0 || p >= 1);
+}
+function idleHud(){
+  hudCount.textContent = file ? '等待生成' : '等待输入';
+  hudPct.textContent = '';
+  hudPulse.classList.add('idle');
+}
 
-  /* ---------- 选图 ---------- */
-  function show(f){
-    if(!f || !/^image\//.test(f.type)){ alert('请选一张图片文件'); return; }
-    file = f;
-    thumb.src = URL.createObjectURL(f);
-    thumb.style.display = 'block';
-    drop.classList.add('hasfile');                 // 收成一条，只留「更换图片」
-    drop.querySelector('.big').textContent = '点击或拖入可更换图片';
-    go.disabled = !ready;
-    $('result').style.display = 'none';
-    $('outCard').classList.remove('hasResult');   // 换了图，先回到空状态
-    $('progWrap').style.display = 'none';
-    if(!$('title').value){
-      $('title').value = f.name.replace(/\.[^.]+$/, '').slice(0, 40);
-    }
-  }
-  drop.addEventListener('click', () => pick.click());
-  drop.addEventListener('keydown', (e) => {
-    if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); pick.click(); }
-  });
-  // Ctrl/Cmd + Enter：直接开始生成（PC 上比去点按钮顺手）
-  window.addEventListener('keydown', (e) => {
-    if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){
-      e.preventDefault();
-      if(!go.disabled) go.click();
-    }
-  });
-  pick.addEventListener('change', () => show(pick.files[0]));
-  ['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => {
-    e.preventDefault(); drop.classList.add('over');
-  }));
-  ['dragleave','drop'].forEach(t => drop.addEventListener(t, e => {
-    e.preventDefault(); drop.classList.remove('over');
-  }));
-  drop.addEventListener('drop', e => {
-    const f = e.dataTransfer.files[0];
-    show(f);
-  });
-  window.addEventListener('dragover', e => e.preventDefault());
-  window.addEventListener('drop', e => e.preventDefault());
+/* ---------------- 选项 ---------------- */
+let maxWidth = '1200', preprocess = 'auto';
 
-  /* ---------- 日志 ---------- */
-  function say(text, cls){
-    const line = document.createElement('div');
-    if(cls) line.className = cls;
-    line.textContent = text;
-    logEl.appendChild(line);
-    logEl.scrollTop = logEl.scrollHeight;
-  }
-
-  /* ---------- 全屏预览层 ----------
-   * 为什么不用「新标签页」：blob URL 只在创建它的文档里有效 ——
-   * Android WebView（VIA 等调用系统内核的浏览器）打开新标签页会得到
-   * 空白页（Chrome 自带完整内核所以没事）。页面内 iframe 属于同一文档，
-   * blob 一定有效；桌面端也顺便少开一个标签页。 */
-  function openPreview(htmlText){
-    /* 不在这里显示作品名 —— 回放页自带标题栏，重复会显得乱 */
-    /* 用 srcdoc 注入、而不是 blob URL：Android WebView（VIA 等调用系统内核的
-       浏览器）默认拦掉 blob: 协议 —— 新标签页和 iframe 都会得到空白页；
-       srcdoc 是纯 DOM 注入、不经过 URL 加载，所有浏览器都认。 */
-    $('pvFrame').removeAttribute('src');
-    $('pvFrame').srcdoc = htmlText;
-    $('preview').classList.add('on');
-  }
-  function closePreview(){
-    if(!$('preview').classList.contains('on')) return;
-    $('preview').classList.remove('on');
-    $('pvFrame').removeAttribute('srcdoc');   // 丢弃内容，释放内存
-    $('pvFrame').src = 'about:blank';
-  }
-  $('pvClose').addEventListener('click', closePreview);
-  document.addEventListener('keydown', function(e){
-    if(e.key === 'Escape') closePreview();
+function segGroup(id, cb){
+  const box = $(id);
+  box.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if(!b) return;
+    box.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', 'false'));
+    b.setAttribute('aria-pressed', 'true');
+    cb(b.dataset.w !== undefined ? b.dataset.w : b.dataset.v);
   });
-  /* 结果卡的「预览」：拦掉默认的新标签页行为，改走页面内全屏（srcdoc） */
-  $('openHtml').addEventListener('click', function(e){
+}
+/* 初值必须和界面上默认选中的按钮一致（「标准」= 1200） */
+segGroup('segSize', v => {
+  maxWidth = v;
+  $('maxHint').classList.toggle('show', v === '0');
+});
+/* 三档的实际行为（见 web_run.py 的 preprocess()）：none=照片 原图直接描摹；
+   auto=自动 仅宽度 <1200 才放大 2 倍；illust=插画 一律放大 2 倍并额外降噪。
+   提示文案必须跟着选中的档走，否则选了「照片」（压根不放大）却还写着「会自动放大 2 倍」。 */
+const TYPE_HINT = {
+  auto:   '宽度小于 1200 的小图会被自动放大 2 倍再描摹（轮廓更顺、色块更干净）。',
+  none:   '照片：原图直接描摹，不放大、不降噪。',
+  illust: '插画：一律放大 2 倍并额外降噪，适合色块平、线条清楚的图。',
+};
+segGroup('segType', v => {
+  preprocess = v;
+  $('typeHint').textContent = TYPE_HINT[v] || TYPE_HINT.auto;
+});
+
+/* ---------------- 选图 ---------------- */
+let srcUrl = null;                    // 当前源的 object URL，换图时要 revoke 掉旧的
+let lastHtmlUrl = null;               // 上一轮生成的回放页 URL，下一轮生成时回收
+let lastDuration = 90;                // 本轮实际发给 worker 的时长（生成中改输入框不影响它）
+/* 舞台上现在摆的是哪条历史。删单条 / 全部清空时要把它的 objectURL revoke 掉，
+   而工具条上的 href 就是那份 URL —— 不跟着收摊的话，链接会指向已失效的 blob，
+   点下去静默失败（下载三件套的 .off 也不会自己回来）。 */
+let currentRecId = null;
+function show(f){
+  if(!f || !/^image\//.test(f.type)){ toast('请选一张图片文件', true); return; }
+  // 生成过程中换图会改掉 file / 标题，而 onDone 用的是「当时」的 file 取缩略图 →
+  // 历史条目的缩略图和标题会跟实际产物对不上。这里直接拦住。
+  if(busy){ toast('正在生成，请等这次完成后再换图', true); return; }
+  file = f;
+  if(srcUrl) URL.revokeObjectURL(srcUrl);
+  srcUrl = URL.createObjectURL(f);
+  const url = srcUrl;
+  const im = $('thumb');
+  // 顺序很重要：必须先挂 onload 再设 src。反过来写，一旦图片即时命中缓存，
+  // onload 会在赋值之前触发，回调丢失 → 尺寸永远显示「—」。
+  im.onload = () => {
+    const w = im.naturalWidth, h = im.naturalHeight;
+    $('srcDims').textContent = w + ' × ' + h + ' · ' + fmtSize(f.size);
+    setHud(undefined, 'SOURCE ' + w + '×' + h, 'CANVAS ' + w + ' PT');
+  };
+  im.src = url;
+  // 左栏源图卡：把占位换成缩略图
+  const box = $('picBox');
+  let pic = box.querySelector('img');
+  if(!pic){
+    box.innerHTML = '';
+    pic = document.createElement('img');
+    pic.alt = '';
+    box.appendChild(pic);
+  }
+  pic.src = url;
+  $('srcName').textContent = f.name;
+  // 用 DOM API 而不是拼 innerHTML：f.type 是外部字符串。浏览器一般只给合法 MIME，
+  // 但同一个文件里对 rec.title 都特意走了 textContent，这里没理由破例。
+  const tags = $('srcTags');
+  tags.innerHTML = '';
+  const tg1 = document.createElement('span');
+  tg1.className = 'tag ok'; tg1.textContent = '已载入源图';
+  const tg2 = document.createElement('span');
+  tg2.className = 'tag';
+  tg2.textContent = f.type.replace('image/', '').toUpperCase() || 'IMG';
+  tags.appendChild(tg1); tags.appendChild(tg2);
+  $('srcTag').textContent = '已就绪';
+  // 注意这行用的是 textContent，会清掉 #drop 里的全部子元素。现在它只有一段文字，
+  // 安全；以后若要往里放图标或角标，改成只改文字节点（像原版那样 querySelector 子节点）。
+  drop.textContent = '＋ 点击或拖入可更换图片';
+
+  go.disabled = !ready;
+  // 换图后这一轮还没开始生成：按钮文案和 HUD 模式都要回到「初始」，
+  // 否则会停在上一轮的「再生成一次」/「RENDERED」「ARCHIVE」上。
+  goText.textContent = '开始生成';
+  setHud('VIEWFINDER // READY');
+  /* 原版选完图是把结果区隐藏、退回空态引导区；这里改成直接把选中的图摆上舞台 ——
+     比只留左栏那个 48x64 的小图有用，用户能立刻看清选的是哪张。 */
+  // 旧回放页必须卸掉：隐藏在 iframe 里它照样跑 rAF 和 250ms 上报，会把底部进度条继续往前推
+  frame.removeAttribute('srcdoc');
+  clearInterval(tickTimer);
+  clearTimeout(remoteTimer);
+  clearTimeout(zoomProbe);
+  showViewport(false);
+  /* 舞台上已经没有回放页了（显示的是刚选的源图），控制条必须停用：
+     否则点播放是往一个空 iframe 发指令，而底部进度条靠本地兜底照样会走。
+     链接的 href 也一并清掉，免得「全屏预览」打开的仍是上一件作品。 */
+  setToolsEnabled(false);
+  ['openHtml','dlSvg','dlHtml'].forEach((id) => { $(id).removeAttribute('href'); });
+  lastHtmlText = '';
+  $('progWrap').classList.remove('show');
+  idleHud();
+  if(!$('title').value){
+    $('title').value = f.name.replace(/\.[^.]+$/, '').slice(0, 40);
+  }
+}
+
+function showEmpty(){
+  emptyState.style.display = '';
+  viewport.style.display = 'none';
+  noteLeft.style.display = 'none';
+  noteRight.style.display = 'none';
+  // 把旧回放页卸掉：否则它在看不见的地方继续跑 rAF + 250ms 定时器，白烧 CPU
+  frame.removeAttribute('srcdoc');
+  clearInterval(tickTimer);
+  clearTimeout(remoteTimer);
+  // zoomProbe 也要清：留着它 600ms 后会把 #zLvl 改成「—」并挂上「这个回放页不支持
+  // 外部缩放」的提示，而此时舞台上根本没有回放页。
+  clearTimeout(zoomProbe);
+  clearTimeout(capsTimer);
+  remoteCtl = null;                 // 下次载入回放页时重新探测
+  $('zLvl').textContent = '100%';
+  $('zLvl').title = '';
+  $('tc').textContent = '00:00 / 00:00';
+  $('tc').title = '';
+  currentRecId = null;              // 舞台上已经没东西了，别再把它当成「当前记录」
+  /* 三个链接的 href 也要摘掉。删单条 / 清空历史会把对应记录的 objectURL revoke 掉，
+     留着 href 就是一个指向失效 blob 的死链（.off 只挡鼠标，右键复制链接照样能拿到）。 */
+  ['openHtml','dlSvg','dlHtml'].forEach((id) => { $(id).removeAttribute('href'); });
+  setToolsEnabled(false);
+}
+function showViewport(isReplay){
+  emptyState.style.display = 'none';
+  viewport.style.display = '';
+  $('thumb').style.display = isReplay ? 'none' : 'block';
+  frame.style.display = isReplay ? 'block' : 'none';
+}
+function setToolsEnabled(on){
+  $('playBtn').disabled = !on;
+  $('track').style.pointerEvents = on ? '' : 'none';
+  $('track').style.opacity = on ? '' : '.4';
+  // 和三个下载链接保持一致：禁用时一并摘掉 tabindex，否则键盘仍能聚焦上去
+  // #track 初始就是 tabindex="0"（role="slider" 必须能聚焦）。早先写成 removeAttribute，
+  // 结果 setToolsEnabled(true) 反而让滑块永久不可聚焦，方向键 / 空格的处理器成了死代码。
+  $('track').setAttribute('tabindex', on ? '0' : '-1');
+  ['openHtml','dlSvg','dlHtml'].forEach((id) => {
+    const a = $(id);
+    a.classList.toggle('off', !on);
+    a.setAttribute('aria-disabled', String(!on));
+    // aria-disabled 只是语义，<a> 照样能 Tab 聚焦、回车激活；.off 也只挡
+    // pointer-events。真要拦住键盘，得把 tabindex 一并摘掉。
+    if(on) a.removeAttribute('tabindex'); else a.setAttribute('tabindex', '-1');
+  });
+  $('speeds').style.opacity = on ? '' : '.4';
+  // 倍速按钮以前只改透明度、仍然可点（改了速度却没有回放页，像坏了）
+  $('speeds').querySelectorAll('button').forEach((b) => { b.disabled = !on; });
+  /* 缩放 / 对照这 6 个控件也要一起管：舞台上没有回放页时它们照样能点，
+     而点下去只会让 zoomProbe 把 #zLvl 写成「—」并挂上「这个回放页不支持外部缩放」——
+     此刻压根没有回放页，属于自相矛盾的提示。 */
+  ['zIn','zOut','zFit','zRst','ghostBtn2'].forEach((id) => { $(id).disabled = !on; });
+}
+
+drop.addEventListener('click', () => pick.click());
+drop.addEventListener('keydown', (e) => {
+  if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); pick.click(); }
+});
+// Ctrl/Cmd + Enter：直接开始生成
+window.addEventListener('keydown', (e) => {
+  if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){
     e.preventDefault();
-    openPreview(lastHtmlText);
-  });
+    if(!go.disabled) go.click();
+  }
+});
+pick.addEventListener('change', () => {
+  const f = pick.files[0];
+  // 必须清空：否则用户再选一次同一个文件时 input 的 value 没变，change 不触发，
+  // 表现为「点了没反应」。
+  pick.value = '';
+  show(f);
+});
+['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => {
+  e.preventDefault(); drop.classList.add('over');
+}));
+['dragleave','drop'].forEach(t => drop.addEventListener(t, e => {
+  e.preventDefault(); drop.classList.remove('over');
+}));
+drop.addEventListener('drop', e => show(e.dataTransfer.files[0]));
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
 
-  /* 预览框里的「全屏」请求（回放页 postMessage 上来的）：
-     结果卡里点 → 打开铺满整屏的预览层；预览层里再点 → 收回。
-     （回放页自己的伪全屏出不了 iframe，铺不满屏幕） */
-  window.addEventListener("message", function(e){
-    if(!e.data || e.data.type !== "art:fullscreen") return;
-    if($('preview').classList.contains('on')){
-      if(e.source === $('pvFrame').contentWindow) closePreview();
-    }else if(e.source === $('frame').contentWindow){
+/* ---------------- 日志 ---------------- */
+function say(text, cls){
+  const line = document.createElement('div');
+  if(cls) line.className = cls;
+  line.textContent = text;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+/* 回放页「对端」探测 ------------------------------------------------------
+ * tools/svg2canvas.py 生成的真实回放页只有 addEventListener("click"...) 那一批，
+ * 既没有 message 监听，也不上报 tick / zoom（它只发 art:fullscreen）。
+ * 而本文件内置的演示页会完整回报。所以「对面认不认这些指令」不能按 mockMode 猜，
+ * 只能探测：发出指令后一小段时间内收到过对应回报 → 交给回放页；没收到 → 本地驱动。
+ * （早先按 frame.srcdoc 判断是错的：能点播放时 srcdoc 必然已经设上，本地兜底永远不启动。） */
+let tickSeen = 0;                 // 最近一次收到 replay:tick 的时间戳
+let zoomSeen = 0;                 // 最近一次收到 zoom:state 的时间戳
+let remoteTimer = null, zoomProbe = null;
+
+/* ---------------- 全屏预览层 ----------------
+ * 不用「新标签页」：blob URL 只在创建它的文档里有效，Android WebView 打开
+ * 新标签页会得到空白页。这里用 srcdoc 注入，纯 DOM、不经过 URL 加载。 */
+let previewReturnTo = null;            // 打开预览前焦点在哪，关闭时还回去
+function openPreview(htmlText){
+  if(!htmlText){ toast('还没有可预览的内容', true); return; }
+  previewReturnTo = document.activeElement;
+  pvFrame.removeAttribute('src');
+  pvFrame.srcdoc = htmlText;
+  preview.classList.add('on');
+  try{ preview.focus(); }catch(_){}
+}
+function closePreview(){
+  if(!preview.classList.contains('on')) return;
+  preview.classList.remove('on');
+  pvFrame.removeAttribute('srcdoc');
+  pvFrame.src = 'about:blank';
+  // 焦点不能留在已经隐藏的层上，否则键盘用户会「掉」在一个看不见的地方
+  const back = previewReturnTo; previewReturnTo = null;
+  if(back && back.focus){ try{ back.focus(); }catch(_){} }
+}
+$('pvClose').addEventListener('click', closePreview);
+/* 预览层是 aria-modal 的对话框，Tab 不能跑到背后的页面上 —— 否则键盘用户会
+   陷在「看不见的地方」（层盖住了整个视口，焦点却在下面的按钮上）。 */
+$('preview').addEventListener('keydown', (e) => {
+  if(e.key !== 'Tab') return;
+  const f = [...$('preview').querySelectorAll('button, a[href], iframe, [tabindex]:not([tabindex="-1"])')]
+    .filter((el) => !el.disabled);
+  if(!f.length) return;
+  const first = f[0], last = f[f.length - 1];
+  if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+});
+document.addEventListener('keydown', e => { if(e.key === 'Escape') closePreview(); });
+$('openHtml').addEventListener('click', e => { e.preventDefault(); openPreview(lastHtmlText); });
+
+/* 回放页发上来的全屏请求：结果区点 → 打开预览层；预览层里再点 → 收回 */
+window.addEventListener('message', e => {
+  const d = e.data;
+  if(!d || typeof d !== 'object') return;
+  // 只认我们自己那两个 iframe 发来的消息：否则任何被嵌文档都能改缩放标签、
+  // 对照按钮的 aria-pressed 和底部进度条。
+  const fromOurs = e.source && (
+    e.source === frame.contentWindow ||
+    e.source === pvFrame.contentWindow
+  );
+  if(!fromOurs) return;
+  if(d.type === 'art:fullscreen'){
+    if(preview.classList.contains('on')){
+      if(e.source === pvFrame.contentWindow) closePreview();
+    } else if(e.source === frame.contentWindow){
       openPreview(lastHtmlText);
     }
+    return;
+  }
+  /* 下面三类是「主舞台那个回放页」的状态回报，只认 frame 发来的。
+     预览层里跑的是同一个页面的另一个实例，演示页一开机就以 t=DUR 开局，
+     让它回报会把主进度条瞬间顶到 100% 并冻在那里。 */
+  if(e.source !== frame.contentWindow) return;
+  // 回放页上报缩放级别，同步工具条
+  if(d.type === 'zoom:state'){
+    zoomSeen = Date.now();
+    $('zLvl').textContent = Math.round((d.s || 1) * 100) + '%';
+    $('zLvl').title = '';
+    return;
+  }
+  if(d.type === 'ghost:state'){
+    $('ghostBtn2').setAttribute('aria-pressed', String(!!d.on));
+    return;
+  }
+  // 回放页上报进度，同步底部控制条
+  if(d.type === 'replay:tick'){
+    tickSeen = Date.now();
+    replay.t = d.t || 0;
+    replay.total = d.total || replay.total;
+    replay.playing = !!d.playing;
+    syncReplayUI();
+  }
+});
+
+/* ---------------- 回放控制条 ----------------
+ * 单文件里没有真实回放页时，这套控件驱动内置的演示时间轴；
+ * 有 iframe 时，用 postMessage 把指令转发进去。 */
+/* 对端能力探测 ------------------------------------------------------------
+ * 真实回放页（tools/svg2canvas.py 的产物）既没有 message 监听、也不上报任何状态，
+ * 而且它自己会在 600ms 后自动播放。宿主的播放 / 倍速 / 拖动 seek 对它全是空指令 ——
+ * 与其留一组「点了没反应」的控件、再让底部进度条自顾自空跑，不如探明之后明确降级：
+ * 把控制条标成「由画面内部控制」，进度交给画面里它自己那条。 */
+let remoteCtl = null;        // null=未知 / true=对端会回报 / false=对端不认指令
+let capsTimer = null;
+function probeRemote(){
+  clearTimeout(capsTimer);
+  const at = Date.now();
+  capsTimer = setTimeout(() => {
+    const live = tickSeen >= at;
+    remoteCtl = live;
+    $('playBtn').disabled = !live;
+    $('track').style.opacity = live ? '' : '.4';
+    $('track').style.pointerEvents = live ? '' : 'none';
+    $('speeds').style.opacity = live ? '' : '.4';
+    $('speeds').querySelectorAll('button').forEach((b) => { b.disabled = !live; });
+    $('tc').textContent = live ? mmss(replay.t) + ' / ' + mmss(replay.total) : '由画面内部控制';
+    $('tc').title = live ? '' : '这个回放页没有开放外部控制接口，请在画面里用它自己的控制条';
+    if(!live) toast('这个回放页不支持外部控制，播放与缩放请在画面内操作');
+  }, 700);
+}
+
+function post(cmd){
+  try{
+    if(frame.contentWindow) frame.contentWindow.postMessage(cmd, '*');
+    if(preview.classList.contains('on') && pvFrame.contentWindow) pvFrame.contentWindow.postMessage(cmd, '*');
+  }catch(_){}
+}
+function syncReplayUI(){
+  const p = replay.total > 0 ? Math.min(1, replay.t / replay.total) : 0;
+  $('fillBar').style.width = (p * 100) + '%';
+  $('knob').style.left = (p * 100) + '%';
+  $('tc').textContent = mmss(replay.t) + ' / ' + mmss(replay.total);
+  $('track').setAttribute('aria-valuenow', String(Math.round(p * 100)));
+  $('playBtn').textContent = replay.playing ? '❚❚' : '▶';
+  $('playBtn').setAttribute('aria-label', replay.playing ? '暂停' : '播放');
+  // 倍速按钮的选中态跟着 replay.speed 走：生成完成和载入历史都会把 speed 打回 1，
+  // 但按钮的 aria-pressed 不会自己变 —— 会出现「4× 亮着、实际按 1× 推进」。
+  $('speeds').querySelectorAll('button').forEach((b) => {
+    b.setAttribute('aria-pressed', String(parseFloat(b.dataset.s) === replay.speed));
   });
+}
+/* ---- 缩放 / 对照：主页面工具条 ---- */
+function sendZoom(cmd, val){
+  const m = { type: cmd };
+  if(val !== undefined) m.v = val;
+  post(m);
+  // 真实回放页不认这些指令、也不回报 zoom:state。探一下：没回报就把级别显示成
+  // 「—」并给出提示，否则用户连点缩放却毫无变化，会以为是自己没点到。
+  const at = Date.now();
+  clearTimeout(zoomProbe);
+  zoomProbe = setTimeout(() => {
+    if(zoomSeen >= at) return;                 // 对面在管，不插手
+    $('zLvl').textContent = '—';
+    $('zLvl').title = '这个回放页不支持外部缩放，请在画面内用滚轮 / 双指操作';
+  }, 600);
+}
+$('zIn').addEventListener('click', () => sendZoom('zoom:in'));
+$('zOut').addEventListener('click', () => sendZoom('zoom:out'));
+$('zFit').addEventListener('click', () => sendZoom('zoom:fit'));
+$('zRst').addEventListener('click', () => sendZoom('zoom:1'));
+$('ghostBtn2').addEventListener('click', (e) => {
+  const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+  e.currentTarget.setAttribute('aria-pressed', String(on));
+  post({ type:'ghost:set', on: on });
+});
+$('playBtn').addEventListener('click', () => {
+  if($('playBtn').disabled) return;
+  replay.playing = !replay.playing;
+  post({ type: replay.playing ? 'replay:play' : 'replay:pause' });
+  if(replay.playing) startTick();
+  else { clearInterval(tickTimer); clearTimeout(remoteTimer); }
+  syncReplayUI();
+});
+$('speeds').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if(!b) return;
+  $('speeds').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed','false'));
+  b.setAttribute('aria-pressed','true');
+  replay.speed = parseFloat(b.dataset.s);
+  post({ type:'replay:speed', v: replay.speed });
+});
+function seekTo(frac){
+  frac = Math.max(0, Math.min(1, frac));
+  replay.t = frac * replay.total;
+  post({ type:'replay:seek', t: replay.t });
+  syncReplayUI();
+}
+$('track').addEventListener('click', e => {
+  if($('playBtn').disabled) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  seekTo((e.clientX - r.left) / r.width);
+});
+$('track').addEventListener('keydown', e => {
+  if($('playBtn').disabled) return;
+  if(e.key === 'ArrowLeft'){ e.preventDefault(); seekTo((replay.t - 5) / replay.total); }
+  if(e.key === 'ArrowRight'){ e.preventDefault(); seekTo((replay.t + 5) / replay.total); }
+  if(e.key === ' '){ e.preventDefault(); $('playBtn').click(); }
+});
+/* 推进底部进度条 / 时间码。
+   真实回放页不上报进度（它自己有一条进度条），所以先等 500ms 探一次：
+   探测期内收到过 replay:tick → 对面在管，不插手；没收到 → 本地按 speed 推进。
+   本地推进用的 replay.total 与回放页的 DUR 同源（都来自「时长」输入框），
+   所以两边比例是对得上的。 */
+function startTick(){
+  clearInterval(tickTimer);
+  clearTimeout(remoteTimer);
+  // 探测已经判定对端不认指令（真实回放页），那就别本地空跑一根对不上的进度条 ——
+  // 它自己的进度条在画面里，宿主这条纯属误导。
+  if(remoteCtl === false){ return; }
+  const at = Date.now();
+  remoteTimer = setTimeout(() => {
+    if(tickSeen >= at) return;
+    tickTimer = setInterval(() => {
+      if(!replay.playing) return;
+      replay.t += 0.25 * replay.speed;
+      if(replay.t >= replay.total){ replay.t = replay.total; replay.playing = false; }
+      syncReplayUI();
+      setReplayHud(replay.t / replay.total);
+      if(replay.t >= replay.total) clearInterval(tickTimer);
+    }, 250);
+  }, 500);
+}
 
-  /* ---------- 历史（IndexedDB） ----------
-   * 用 IndexedDB 而不是 localStorage：单条记录就有 5~30 MB，
-   * localStorage 只有 5 MB 上限，塞不下。
-   */
-  const DB_NAME = 'photo-to-svg', DB_VER = 1, STORE = 'records';
-  const MAX_ITEMS = 12, MAX_BYTES = 260 * 1024 * 1024;   // 条数与总体积双上限
-  let db = null;
+/* ---------------- IndexedDB 历史 ----------------
+ * 用 IndexedDB 而不是 localStorage：单条记录 5~30 MB，localStorage 只有 5 MB。 */
+const DB_NAME = 'photo-to-svg', DB_VER = 1, STORE = 'records';
+const MAX_ITEMS = 12, MAX_BYTES = 260 * 1024 * 1024;
+let db = null;
 
-  function openDB(){
-    return new Promise((res, rej) => {
-      const req = indexedDB.open(DB_NAME, DB_VER);
-      req.onupgradeneeded = () => {
-        const d = req.result;
-        if(!d.objectStoreNames.contains(STORE)){
-          const s = d.createObjectStore(STORE, { keyPath: 'id' });
-          s.createIndex('at', 'at');
-        }
-      };
-      req.onsuccess = () => res(req.result);
-      req.onerror = () => rej(req.error);
-    });
-  }
-  const tx = (mode) => db.transaction(STORE, mode).objectStore(STORE);
-  const wrap = (r) => new Promise((res, rej) => {
-    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+function openDB(){
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, DB_VER);
+    req.onupgradeneeded = () => {
+      const d = req.result;
+      if(!d.objectStoreNames.contains(STORE)){
+        const s = d.createObjectStore(STORE, { keyPath: 'id' });
+        s.createIndex('at', 'at');
+      }
+    };
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
   });
+}
+const tx = (mode) => db.transaction(STORE, mode).objectStore(STORE);
+const wrapReq = (r) => new Promise((res, rej) => {
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+});
+async function dbAll(){
+  const list = await wrapReq(tx('readonly').getAll());
+  return list.sort((a, b) => b.at - a.at);
+}
+async function dbPut(rec){ await wrapReq(tx('readwrite').put(rec)); }
+async function dbDel(id){ await wrapReq(tx('readwrite').delete(id)); }
 
-  async function dbAll(){
-    const list = await wrap(tx('readonly').getAll());
-    return list.sort((a, b) => b.at - a.at);
+async function prune(){
+  let list = await dbAll();
+  let bytes = list.reduce((n, r) => n + (r.size || 0), 0);
+  while(list.length > MAX_ITEMS || (bytes > MAX_BYTES && list.length > 1)){
+    const last = list.pop();
+    bytes -= last.size || 0;
+    dropUrls(last.id);
+    await dbDel(last.id);
   }
-  async function dbPut(rec){ await wrap(tx('readwrite').put(rec)); }
-  async function dbDel(id){ await wrap(tx('readwrite').delete(id)); }
+  return list;
+}
 
-  /* 超出上限就从最旧的开始删 */
-  async function prune(){
-    let list = await dbAll();
-    let bytes = list.reduce((n, r) => n + (r.size || 0), 0);
-    while(list.length > MAX_ITEMS || (bytes > MAX_BYTES && list.length > 1)){
-      const last = list.pop();
-      bytes -= last.size || 0;
-      await dbDel(last.id);
-    }
-    return list;
-  }
+/* 缩略图：把用户选的图直接画小，不用等 SVG 出来 */
+function thumbOf(f){
+  return new Promise((res) => {
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => {
+      const N = 128;
+      const s = Math.min(N / img.width, N / img.height, 1);
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.width * s));
+      c.height = Math.max(1, Math.round(img.height * s));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      try{ res(c.toDataURL('image/jpeg', 0.72)); }catch(_){ res(''); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); res(''); };
+    img.src = url;
+  });
+}
 
-  function fmtSize(n){
-    if(n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
-    if(n >= 1024) return (n / 1024).toFixed(0) + ' KB';
-    return n + ' B';
-  }
-  function fmtTime(ms){
-    const d = new Date(ms), now = Date.now();
-    const p = (x) => String(x).padStart(2, '0');
-    const hm = p(d.getHours()) + ':' + p(d.getMinutes());
-    if(now - ms < 86400000) return '今天 ' + hm;
-    if(now - ms < 172800000) return '昨天 ' + hm;
-    return (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + hm;
-  }
+const urlCache = new Map();   // id -> {svg, html} 的对象 URL，避免重复创建
+/* 丢弃某条记录缓存的 URL。删除单条、清理空间、清空历史三处都必须走它 ——
+   否则被删掉的记录其 SVG / 回放页 URL（每条 5~30MB）会一直挂在内存里。 */
+function dropUrls(id){
+  axisCache.delete(id);          // 升级结果也一起丢，不然删掉记录后它还挂在内存里
+  const u = urlCache.get(id);
+  if(!u) return;
+  if(u.svg) URL.revokeObjectURL(u.svg);
+  if(u.html) URL.revokeObjectURL(u.html);
+  urlCache.delete(id);
+}
+/* 注意 html 初始必须是 null：它由 htmlUrlOf() 在「升级完成」后填入。
+   直接在这里就 createObjectURL(rec.html)，会让 htmlUrlOf 的 `if(u.html) return`
+   恒真 —— 升级链（时间轴 / 布局 / 底板色）全成死代码，界面预览是升级过的、
+   下载到手的却是未升级的原件。 */
+function urlsOf(rec){
+  let u = urlCache.get(rec.id);
+  if(!u){ u = { svg: URL.createObjectURL(rec.svg), html: null }; urlCache.set(rec.id, u); }
+  return u;
+}
 
-  /* 生成缩略图：把用户选的图直接画小，不用等 SVG 出来 */
-  function thumbOf(file){
-    return new Promise((res) => {
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.onload = () => {
-        const N = 128;
-        const s = Math.min(N / img.width, N / img.height, 1);
-        const c = document.createElement('canvas');
-        c.width = Math.max(1, Math.round(img.width * s));
-        c.height = Math.max(1, Math.round(img.height * s));
-        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-        URL.revokeObjectURL(url);
-        try{ res(c.toDataURL('image/jpeg', 0.72)); }catch(_){ res(''); }
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); res(''); };
-      img.src = url;
-    });
-  }
-
-  const urlCache = new Map();   // id -> {svg, html} 的对象 URL，避免重复创建
-  function urlsOf(rec){
-    let u = urlCache.get(rec.id);
-    if(!u){ u = { svg: URL.createObjectURL(rec.svg), html: null }; urlCache.set(rec.id, u); }
-    return u;
-  }
-
-  /* ---------- 历史记录里的「旧版回放页」升级 ----------
-   * 早期生成的页面把线稿反解成固定 15% 的播出时间（起稿要磨十几秒）；
-   * 新默认按「√bbox面积 ≈ 线长」自然播（3 秒出头）。
-   * 历史里存的 HTML 是生成那一刻的成品，这里在打开/下载时把时间轴换成新逻辑，
-   * 只改内存里的副本，不动 IndexedDB 里存的原件。
-   * 注意：AXIS_NEW 要和 tools/svg2canvas.py 模板里那段保持同步。 */
+/* ---------------- 历史记录里的「旧版回放页」升级 ----------------
+ * 历史里存的是生成那一刻的成品，这里在打开/下载时升级，只改内存副本，
+ * 不动 IndexedDB 里的原件。三段互相独立，逐条判定、能升多少升多少。
+ * 注意：AXIS_NEW 要和 tools/svg2canvas.py 模板里那段保持同步。 */
   const AXIS_OLD =
     "  for(i=NL;i<N;i++){ w=0.15+AREA[i]*0.002; W[i]=w; sumW+=w; }\n" +
     "  var LW = SKETCH_T>0 ? (SKETCH_T*sumW)/((1-SKETCH_T)*NL) : 0.15;\n" +
@@ -691,21 +1301,9 @@
     "    for(i=NL;i<N;i++) W[i]=0.15+AREA[i]*0.002;\n" +
     "  }";
 
-  /* ---------- 历史里的旧回放页：布局升级（2026-09「相册式」缩放） ----------
-     旧版把视口做成了贴着图片的小框（放大只能在框里裁剪、缩放条压住画面）。
-     这套规则把它换成新布局。规则来自 0f648ca 前后的模板对比，
-     含作品参数的几处（canvas 尺寸、W/H）用正则。
-
-     **逐条独立应用，不再是「全中才生效」**（2026-09-15 修）：规则是按世代累积的
-     —— 第 0 条针对最早那批页面、最后几条针对最新那批 —— 而用户的历史记录横跨
-     好几个世代。原先要求全部命中、任何一处对不上就整体放弃，等于「只要不是从
-     最老版本一路升上来的页面，就一条都别想升」：实测 0a7cbbc / 83dbe13 / ea3acd6
-     三个世代的产物**全部卡在第 0 条**（它们早就没有「首帧兜底尺寸」那段注释了），
-     于是 #sideView、指针捕获、双栏隐藏对照层这些修复一条都没轮到，
-     历史预览里的老毛病原样存在（用户报「修完了网站上还是有问题」就是这个）。
-     现在每条规则自己判定：命中就替换、命中不了就跳过（顺序仍然保留 —— 后面的
-     规则依赖前面的输出）。每条规则的 from/re 都覆盖一整段完整代码块，
-     所以「只中一半」不会把页面改坏。 */
+/* 布局升级规则（2026-09「相册式」缩放）。
+   逐条独立应用 —— 用户的历史横跨好几个世代，要求「全中才生效」
+   会让中间世代的产物一条都升不了。 */
   const LAYOUT_RULES = [
     { re: /  \/\* 首帧兜底尺寸[\s\S]{0,400}?touch-action:none\}/,
       to: `  /* .frame 是「视口」：撑满整个可用区域，图片按适配尺寸居中显示。
@@ -1205,6 +1803,11 @@ document.getElementById("zIn").onclick  = function(){ pause(); zoomBy(1.4); };
 document.getElementById("zOut").onclick = function(){ pause(); zoomBy(1 / 1.4); };
 document.getElementById("zFit").onclick = function(){ pause(); resetView(); resetSide(); };
 document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fitScale); setZoomAt2(1 / fitScale); };` },
+    /* 并排对照的宽度阈值：老回放页要求 iframe 宽 ≥1000，而 iframe ≈ 窗口宽 − 416，
+       换算下来窗口得 1416 以上 —— 1280 / 1366 这类常见笔记本永远进不了并排对照。
+       降到 800 与内置演示页、以及 tools/svg2canvas.py 现在的取值保持一致。 */
+    { from: 'return ghostOn && window.innerWidth>=1000 && (window.innerWidth/window.innerHeight)>=1.0;',
+      to:   'return ghostOn && window.innerWidth>=800 && (window.innerWidth/window.innerHeight)>=1.0;' },
   ];
 
   /* 「这条规则是不是已经打过了」——把 to 里相对 from 新增的**代码行**按连续段切块
@@ -1257,7 +1860,10 @@ document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fit
         if(!r.re.test(out)) continue;                 // 这条对不上：跳过，不放弃整轮
         out = out.replace(r.re, r.to); hit++;
       }else{
-        if(out.split(r.from).length !== 2) continue;   // 必须恰好命中一处，否则跳过
+        // 恰好命中一处才动手。用两次 indexOf 代替 split().length：split 会为
+        // 十几 MB 的正文复制一整份数组，39 条规则跑下来主线程会明显卡顿。
+        const i0 = out.indexOf(r.from);
+        if(i0 < 0 || out.indexOf(r.from, i0 + r.from.length) >= 0) continue;
         out = out.replace(r.from, r.to); hit++;
       }
     }
@@ -1284,11 +1890,24 @@ document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fit
     }catch(_){ return null; }
   }
 
-  async function upgradeAxis(rec){
-    if(rec._axisDone) return rec.html;      // 本次会话里已经处理过
+  /* 升级结果的缓存。必须按记录 id 存，不能挂在 rec 对象上 —— renderHistory()
+     每次都 dbAll() 从 IndexedDB 读出全新对象，挂在对象上的 Promise 会随之丢掉，
+     于是每点一次历史都要把十几 MB 正文重跑一遍 39 条布局规则。 */
+  const axisCache = new Map();          // id -> Promise<Blob>
+
+  function upgradeAxis(rec){
+    /* 返回「升级后」的回放页 Blob，按 id 缓存成 Promise：
+       ① htmlUrlOf()（填下载链接）与历史点击各调一次。若第二次「早退」返回的是
+          rec.html（原件），下载按钮就指向未升级的老页面，而界面预览的是升级版 ——
+          预览对、下载不对，而且点第二次时预览也会退化成原件。
+       ② 缓存 Promise 而不是「已完成」布尔：连点同一条记录时，两次调用拿到同一个
+          Promise，不会并发跑两遍十几 MB 的文本替换。
+       返回：升级后的 Blob；无可升级项时返回 rec.html 本身。 */
+    let p = axisCache.get(rec.id);
+    if(p) return p;
+    p = (async () => {
     let text;
     try{ text = await rec.html.text(); }catch(_){ return rec.html; }
-    rec._axisDone = true;
     /* 行尾先归一化：网页版（Pyodide）写出的回放页是 LF，但本机 Windows 命令行跑
        make_art.py 时 Python 文本模式会把每个 \n 写成 \r\n，而下面的规则和
        AXIS_OLD / AXIS_NEW 文本都是 LF —— 不归一化，本机生成的历史记录一条都命中不了。
@@ -1313,6 +1932,9 @@ document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fit
     const bc = await fixBaseColor(out, rec.svg);
     if(bc){ out = bc; changed = true; }
     return changed ? new Blob([out], { type: "text/html" }) : rec.html;
+    })();
+    axisCache.set(rec.id, p);
+    return p;
   }
 
   /* 升级后的 HTML 对象 URL（按记录缓存，避免重复处理十几 MB 文本） */
@@ -1324,296 +1946,892 @@ document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fit
     return u.html;
   }
 
-  async function renderHistory(){
-    const list = await dbAll();
-    const card = $('historyCard'), box = $('hList');
-    if(!list.length){ card.style.display = 'none'; return; }
-    card.style.display = 'block';
+/* ---------------- 渲染历史 ---------------- */
+async function renderHistory(){
+  const list = await dbAll();
+  const box = $('hList');
+  box.innerHTML = '';
+  const bytes = list.reduce((n, r) => n + (r.size || 0), 0);
+  $('hQuota').textContent = list.length
+    ? list.length + ' / ' + MAX_ITEMS + ' 条 · ' + fmtSize(bytes)
+    : '';
 
-    const total = list.reduce((n, r) => n + (r.size || 0), 0);
-    let quota = '（存在本机浏览器里）';
-    if(navigator.storage && navigator.storage.estimate){
+  if(!list.length){
+    const e = document.createElement('div');
+    e.className = 'hist-empty';
+    e.textContent = '还没有记录 · 生成的作品会自动存到这里（纯本地 IndexedDB）';
+    box.appendChild(e);
+    return;
+  }
+
+  for(const rec of list){
+    const el = document.createElement('div');
+    el.className = 'hitem';
+    el.setAttribute('role', 'button');
+    el.tabIndex = 0;
+    el.title = '点击预览：' + rec.title;
+    // title 只算补充说明，不是可访问名：读屏会把卡片念成「…笔 ⬇SVG ⬇HTML ✕」
+    el.setAttribute('aria-label', '打开历史记录：' + (rec.title || rec.name || '未命名'));
+    el.innerHTML =
+      '<span class="row">' +
+        '<span class="th">' + (rec.thumb ? '<img alt="" src="' + rec.thumb + '">'
+                                          : '<span class="ph">▣</span>') + '</span>' +
+        '<span class="m"><span class="n"></span><span class="d"></span></span>' +
+      '</span>' +
+      /* 原版每条历史有「预览 / ⬇SVG / ⬇HTML / 删除」四个操作，一个都不能少：
+         少了下载按钮就只能先载入舞台再从主工具条下载，多一步、还会顶掉当前预览。 */
+      '<span class="acts">' +
+        '<button class="a" type="button" data-a="svg" title="下载 SVG" aria-label="下载 SVG">⬇SVG</button>' +
+        '<button class="a" type="button" data-a="html" title="下载回放页" aria-label="下载回放页">⬇HTML</button>' +
+        '<button class="a del" type="button" data-a="del" title="删除这条" aria-label="删除这条记录">✕</button>' +
+      '</span>';
+    el.querySelector('.n').textContent = rec.title || rec.name || '未命名';
+    // 必须用 innerHTML：textContent 不解析 <br>，会把标签当字面文本显示出来。
+    // 这里拼进去的都是本地生成的数值/尺寸（title 走 textContent，避免注入）。
+    el.querySelector('.d').innerHTML =
+      fmtTime(rec.at) + '<br>' + (rec.dims || '') + ' · ' +
+      (rec.strokes || 0).toLocaleString() + ' 笔';
+
+    // 点击整条 = 载入舞台预览（原版是「▶ 预览」按钮，行为一致）
+    const loadIntoStage = async () => {
+      // 生成途中点历史，会把 HUD / 工具条 / 进度区互相踩乱（生成完还会被 onDone 覆盖）
+      if(busy){ toast('正在生成，请等这次完成后再打开历史', true); return; }
       try{
-        const est = await navigator.storage.estimate();
-        if(est.quota) quota = '占用 ' + fmtSize(total) + ' / 可用 ' + fmtSize(est.quota);
-      }catch(_){}
-    }
-    $('hQuota').textContent = list.length + ' 项 · ' + quota;
-
-    box.innerHTML = '';
-    for(const r of list){
-      const el = document.createElement('div');
-      el.className = 'hitem';
-
-      const img = document.createElement('img');
-      img.alt = '';
-      if(r.thumb) img.src = r.thumb;
-      el.appendChild(img);
-
-      const meta = document.createElement('div');
-      meta.className = 'meta';
-      const t1 = document.createElement('div');
-      t1.className = 't'; t1.textContent = r.title || r.name;
-      const d1 = document.createElement('div');
-      d1.className = 'd';
-      d1.textContent = fmtTime(r.at) + ' · ' + (r.strokes || 0).toLocaleString() + ' 色块 · ' +
-                       (r.size && r.dims ? fmtSize(r.size) + ' · ' : '') + (r.dims || '');
-      meta.appendChild(t1); meta.appendChild(d1);
-      el.appendChild(meta);
-
-      const acts = document.createElement('div');
-      acts.className = 'acts';
-      const mk = (label, cls, fn, title) => {
-        const b = document.createElement('button');
-        b.textContent = label; if(cls) b.className = cls;
-        if(title) b.title = title;
-        b.onclick = fn; acts.appendChild(b); return b;
-      };
-      mk('▶ 预览', 'p', async () => {
-        const html = await upgradeAxis(r);       // 旧记录会先升级时间轴与布局
-        openPreview(await html.text());
-      }, '全屏预览回放页');
-      mk('⬇ SVG', '', () => {
-        const a = document.createElement('a');
-        a.href = urlsOf(r).svg; a.download = (r.name || 'artwork') + '.svg';
-        document.body.appendChild(a); a.click(); a.remove();
-      });
-      mk('⬇ HTML', '', async () => {
-        const url = await htmlUrlOf(r);      // 下载的也是升级后的版本
-        const a = document.createElement('a');
-        a.href = url; a.download = (r.name || 'artwork') + '.html';
-        document.body.appendChild(a); a.click(); a.remove();
-      });
-      mk('删除', 'del', async () => {
-        await dbDel(r.id);
-        const u = urlCache.get(r.id);
-        if(u){
-          URL.revokeObjectURL(u.svg);
-          if(u.html) URL.revokeObjectURL(u.html);
-          urlCache.delete(r.id);
+        const upBlob = await upgradeAxis(rec);
+        lastHtmlText = await upBlob.text();
+        currentRecId = rec.id;
+        /* 这里原本有一句 mockMode = false —— 删掉：mockMode 表示「worker 是真是假」，
+           跟「当前显示的是不是历史记录」毫无关系，置 false 只会让引擎徽标说谎。 */
+        /* 进度条的分母必须和这个回放页自己的 DURATION 一致：
+           新记录里存了 duration；老记录没这个字段，就从升级后的 HTML 里把回放页
+           写死的 var DURATION=… 读回来，再兜底 90。以前一律写死 90，
+           用户把时长设成 200 再点历史，底部进度比例就和画面里的进度条对不上了。 */
+        let dur = rec.duration;
+        if(!dur){
+          const dm = /var DURATION=([\d.]+)/.exec(lastHtmlText);
+          dur = dm ? parseFloat(dm[1]) : 90;
         }
-        renderHistory();
-      });
-      el.appendChild(acts);
-      box.appendChild(el);
-    }
-  }
+        replay = { playing: false, t: 0, total: dur, speed: 1 };
+        clearInterval(tickTimer);
+        clearTimeout(remoteTimer);   // 上一次点播放留下的那个 500ms 探测哨兵
+        clearTimeout(zoomProbe);
+        frame.srcdoc = lastHtmlText;
+        probeRemote();
+        showViewport(true);
+        $('playBtn').disabled = false;
+        setHud('VIEWFINDER // ARCHIVE', 'SOURCE ' + (rec.dims || '—'), 'RECORD ' + rec.id.slice(-6));
+        hudCount.textContent = (rec.strokes || 0).toLocaleString() + ' 笔';
+        hudPct.textContent = '';
+        noteLeft.textContent = 'ARCHIVE · ' + (rec.title || '');
+        noteLeft.style.display = '';
+        noteRight.textContent = 'FRAME ' + String(rec.strokes || 0).padStart(5, '0');
+        noteRight.style.display = '';
+        const u = urlsOf(rec);
+        $('dlSvg').href = u.svg;   $('dlSvg').download = (rec.name || 'artwork') + '.svg';
+        $('dlHtml').href = await htmlUrlOf(rec);
+        $('dlHtml').download = (rec.name || 'artwork') + '.html';
+        // #openHtml 的 href 也要跟上：否则右键复制链接 / 中键新标签拿到的还是上一件作品
+        $('openHtml').href = $('dlHtml').href;
+        $('szSvg').textContent = fmtSize(rec.svg.size);
+        $('szHtml').textContent = fmtSize(rec.html.size);
+        syncReplayUI();
+        /* 三个链接都填好之后才开放工具条：早先在这一串之前就 setToolsEnabled(true)，
+           中间那几毫秒里链接还指着上一件作品。 */
+        setToolsEnabled(true);
+        toast('已载入历史记录');
+      }catch(err){
+        toast('这条记录读不出来：' + err.message, true);
+      }
+    };
 
-  /* 「清理空间」：按上限删掉最旧的，并报告释放了多少 */
-  $('hPrune').addEventListener('click', async () => {
-    const before = await dbAll();
-    const beforeBytes = before.reduce((n, r) => n + (r.size || 0), 0);
-    if(!before.length){ alert('还没有生成记录。'); return; }
-    if(!confirm(
-      `当前 ${before.length} 项，共 ${fmtSize(beforeBytes)}。\n\n` +
-      `将按「最多 ${MAX_ITEMS} 项 / ${fmtSize(MAX_BYTES)}」的规则，` +
-      `删除最旧的记录直到符合上限。\n已下载到本地的文件不受影响。继续？`)) return;
-    const kept = await prune();
-    const afterBytes = kept.reduce((n, r) => n + (r.size || 0), 0);
-    renderHistory();
-    alert(`已清理 ${before.length - kept.length} 项，释放 ${fmtSize(beforeBytes - afterBytes)}。\n` +
-          `当前 ${kept.length} 项，共 ${fmtSize(afterBytes)}。`);
-  });
+    // 下载走临时的 <a>，和原版一致：不改变当前舞台、也不跳走
+    const dlTo = (url, filename) => {
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+    };
 
-  $('hClear').addEventListener('click', async () => {
-    const list = await dbAll();
-    if(!list.length){ alert('还没有生成记录。'); return; }
-    const bytes = list.reduce((n, r) => n + (r.size || 0), 0);
-    if(!confirm(
-      `清空全部 ${list.length} 项生成历史，释放约 ${fmtSize(bytes)}？\n\n` +
-      `此操作不可撤销。已经下载到本地的文件不受影响。`)) return;
-    for(const u of urlCache.values()){
-      URL.revokeObjectURL(u.svg);
-      if(u.html) URL.revokeObjectURL(u.html);
-    }
-    urlCache.clear();
-    await wrap(tx('readwrite').clear());
-    renderHistory();
-  });
-
-  /* 保存一条记录（超配额时自动删旧的再试） */
-  async function saveHistory(rec, blobs){
-    const item = Object.assign({}, rec, {
-      svg: blobs.svg, html: blobs.html,
-      size: (blobs.svg.size || 0) + (blobs.html.size || 0),
-      at: Date.now(),
+    // 原来是 <button>，改成 div 后 Enter / 空格要自己接
+    el.addEventListener('keydown', async (ev) => {
+      if(ev.target !== el) return;                 // 焦点在内部按钮上时交给它们
+      if(ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); await loadIntoStage(); }
     });
-    try{
-      await dbPut(item);
-    }catch(e){
-      if(e && (e.name === 'QuotaExceededError' || /quota/i.test(String(e.message)))){
-        await prune();                       // 先清一批再试
-        try{ await dbPut(item); }
-        catch(_){ say('浏览器存储空间不足，这次结果没存进历史（可以直接下载）', 'err'); }
-      } else {
-        say('写入历史失败：' + (e && e.message || e), 'err');
-      }
-    }
-    await renderHistory();
-  }
 
-  /* ---------- Worker ---------- */
-  function boot(){
-    // 首次点开页面就开始预热，等用户选完图基本就绪
-    worker = new Worker('worker.js', { type: 'module' });
-    worker.onmessage = (ev) => {
-      const m = ev.data;
-      if(m.type === 'status'){
-        status.textContent = m.text;
-        bar.classList.add('indet');
-      } else if(m.type === 'ready'){
-        ready = true;
-        bar.classList.remove('indet');
-        // 包装好了就把提示条收起来，但保留缓存信息（挪到进度区显示）
-        $('bootWarn').style.display = 'none';
-        refreshCacheInfo();
-        go.disabled = !file;
-        if(!busy) status.textContent = '就绪';
-      } else if(m.type === 'cacheinfo'){
-        showCacheInfo(m);
-      } else if(m.type === 'cachecleared'){
-        $('clearCache').disabled = false;
-        showCacheInfo({ count: 0, bytes: 0, supported: m.freed !== undefined });
-        alert('已清除运行时缓存，释放 ' + fmtSize(m.freed || 0) + '。\n下次打开需要重新下载。');
-      } else if(m.type === 'cache'){
-        // 实时告诉用户：这次是读缓存还是走网络
-        const s = m.stats || {};
-        if(m.state === 'hit'){
-          $('netInfo').innerHTML = '本次运行：已从本地缓存读取 <b>' + s.cached + '</b> 个文件（不消耗流量）';
+    el.addEventListener('click', async (ev) => {
+      const act = ev.target.closest('[data-a]');
+      if(act){
+        ev.stopPropagation();
+        if(act.dataset.a === 'del'){
+          if(!confirm('删除这条记录？')) return;
+          const isCurrent = (rec.id === currentRecId);
+          await dbDel(rec.id);
+          dropUrls(rec.id);                        // 不回收的话，单条 5~30MB 会一直挂着
+          /* 删掉的正是舞台上这条：它的 objectURL 就是工具条上的 href，已经被 revoke，
+             三个链接全成死链（.off 也不会自己回来）。必须把舞台收回空态。 */
+          if(isCurrent) showEmpty();
+          await renderHistory();
+          toast('已删除');
+        } else if(act.dataset.a === 'svg'){
+          dlTo(urlsOf(rec).svg, (rec.name || 'artwork') + '.svg');
         } else {
-          $('netInfo').innerHTML = '本次运行：正在下载 <b>' + (s.bytes/1048576).toFixed(1) +
-            ' MB</b>（' + s.files + ' 个文件），之后会缓存到本地';
+          dlTo(await htmlUrlOf(rec), (rec.name || 'artwork') + '.html');   // 升级后的版本
         }
-      } else if(m.type === 'log'){
-        if(m.text.startsWith('{"_progress"')){
-          try{
-            const p = JSON.parse(m.text)._progress;
-            bar.classList.remove('indet');
-            barFill.style.width = (p * 100).toFixed(1) + '%';
-            status.textContent = '生成中… ' + Math.round(p * 100) + '%';
-          }catch(_){}
-        } else {
-          say(m.text);
-        }
-      } else if(m.type === 'done'){
-        onDone(m);
-      } else if(m.type === 'error'){
-        busy = false; go.disabled = false;
-        bar.classList.remove('indet');
-        status.innerHTML = '<span class="err">出错了</span>';
-        say(m.text, 'err');
-        go.textContent = '重试';
+        return;
       }
-    };
-    worker.onerror = (e) => {
-      bar.classList.remove('indet');
-      status.innerHTML = '<span class="err">启动失败</span>';
-      say(String(e.message || e), 'err');
-    };
-    worker.postMessage({ type: 'boot' });
+      await loadIntoStage();
+    });
+    box.appendChild(el);
   }
+}
 
-  function mb(n){ return (n / 1048576).toFixed(1) + ' MB'; }
-
-  function showCacheInfo(m){
-    const el = $('cacheInfo');
-    if(!m.supported){ el.textContent = '当前浏览器不支持本地缓存，每次都要下载。'; return; }
-    if(m.count){
-      el.innerHTML = '✓ 运行时已缓存到本机：<b>' + m.count + ' 个文件 · ' + fmtSize(m.bytes) +
-                     '</b>，下次打开直接读取。';
+async function saveHistory(rec, blobs){
+  const item = Object.assign({}, rec, {
+    svg: blobs.svg, html: blobs.html,
+    size: (blobs.svg.size || 0) + (blobs.html.size || 0),
+    at: Date.now(),
+  });
+  let ok = true;
+  try{
+    await dbPut(item);
+  }catch(e){
+    if(e && (e.name === 'QuotaExceededError' || /quota/i.test(String(e.message)))){
+      await prune();
+      try{ await dbPut(item); }
+      catch(_){ ok = false; say('浏览器存储空间不足，这次结果没存进历史（可以直接下载）', 'err'); }
     } else {
-      el.innerHTML = '尚未缓存，本次会下载约 21 MB。';
+      ok = false;
+      say('写入历史失败：' + (e && e.message || e), 'err');
     }
   }
+  // 刷新列表本身也可能失败（IndexedDB 被禁用时 db 是 null，tx() 会抛 TypeError），
+  // 不拦下来就会从这里冒出一个 unhandled rejection。
+  try{ await renderHistory(); }catch(_){}
+  return ok;
+}
 
-  async function refreshCacheInfo(){
-    if(!worker) return;
-    worker.postMessage({ type: 'cachesummary' });
+/* ---------------- 内置模拟生成器 ----------------
+ * 单文件里没有 worker.js / Pyodide，这里按【和真 Worker 完全相同的消息协议】
+ * 产出一份演示作品，好让全部交互都能走通、可验证。
+ * 如果同目录下存在 worker.js，则改用真实现，这段不会被触发。 */
+/* 底板色：与 tools/build_svg_art.py、web/web_run.py 的 PAPER 同源。
+   2026-09-14 起底板恒为纸白 —— 不再按画面取色，也取消了「与底板色差 ≤3
+   整簇跳过不画」的省笔优化：每个地方都实打实画出来，底板只当纸用。
+   所以这里生成的 SVG 自带一层纸白底板 rect，回放页 canvas 也铺同一色，
+   两处必须同源（历史上两边不一致会导致深色图满屏白斑）。 */
+var PAPER = '#f0f0f0';
+
+function mockArtwork(W, H, srcUrl, titleIn){
+  // 用确定性伪随机，保证同一张图每次结果一致
+  let seed = (W * 7919 + H * 104729) % 2147483647 || 1;   // 为 0 时 rnd() 恒返 0，整图会退化成固定排列
+  const rnd = () => (seed = (seed * 48271) % 2147483647) / 2147483647;
+
+  const PALETTE = ['#1B1F24','#242B32','#15191E','#11151A','#0B0D10','#3B3129',
+                   '#251E19','#E8A06A','#D8A279','#2E2723','#8A5C3E','#4A4034'];
+  const blocks = [];
+  // 走廊背景的竖向板块
+  for(let i = 0; i < 5; i++){
+    const x = (i / 5) * W;
+    blocks.push({ x: x, y: 0, w: W / 5 + 1, h: H,
+                  c: PALETTE[Math.floor(rnd() * 4)], k: 'bg' });
+  }
+  // 人物：头 + 肩 + 身体，切成横向色块模拟「大笔刷横条」
+  const cx = W * 0.52, cy = H * 0.30, hr = Math.min(W, H) * 0.13;
+  for(let i = 0; i < 10; i++){
+    blocks.push({ x: cx - hr * 0.85, y: cy - hr + (i * hr * 2 / 10),
+                  w: hr * 1.7 + 1, h: hr * 2 / 10 + 1,
+                  c: i < 6 ? PALETTE[7] : PALETTE[5], k: 'head' });
+  }
+  for(let i = 0; i < 16; i++){
+    const t = i / 16, bw = W * 0.30 * (1 + t * 0.5);
+    blocks.push({ x: cx - bw / 2, y: cy + hr * 0.9 + t * H * 0.42,
+                  w: bw + 1, h: H * 0.42 / 16 + 1,
+                  c: i % 5 === 0 ? PALETTE[10] : PALETTE[9], k: 'body' });
+  }
+  // 边缘细节小块
+  for(let i = 0; i < 40; i++){
+    const bw = 6 + rnd() * 26, bh = bw * (0.4 + rnd());
+    // 坐标上限扣掉自身宽高，否则右边/下边会越出画布（虽被裁掉，但没必要）
+    blocks.push({ x: rnd() * Math.max(0, W - bw), y: rnd() * Math.max(0, H - bh),
+                  w: bw, h: bh,
+                  c: PALETTE[Math.floor(rnd() * PALETTE.length)], k: 'detail' });
   }
 
-  async function onDone(m){
+  // --- SVG ---
+  const paths = blocks.map(b =>
+    '<rect x="' + b.x.toFixed(1) + '" y="' + b.y.toFixed(1) + '" width="' +
+    b.w.toFixed(1) + '" height="' + b.h.toFixed(1) + '" fill="' + b.c + '"/>'
+  ).join('');
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H +
+    '" width="' + W + '" height="' + H + '">' +
+    '<rect width="' + W + '" height="' + H + '" fill="' + PAPER + '"/>' +   // 底板 = 纸
+    paths + '</svg>';
+
+  // --- 回放页 HTML ---
+  // 对标 tools/svg2canvas.py 的产物：相册式视口 + 缩放 + 原图对照 + 双栏。
+  const dur = lastDuration;   // 用本轮派发值，而不是「此刻输入框里写的」——生成中改过就对不上了
+  // 用调用方传进来的标题，而不是「此刻输入框里写的」——生成过程中用户改一下标题，
+  // 回放页的标题就会和仓库记录的门牌对不上（时长那边已经按同样的原则处理了）。
+  const title = (titleIn || '逐笔绘制回放').replace(/[<>&]/g, '');
+  const data = JSON.stringify(blocks.map(b => [Math.round(b.x), Math.round(b.y),
+    Math.round(b.w), Math.round(b.h), b.c]));
+  const ghostCss = srcUrl ? ("background-image:url(" + srcUrl + ");") : '';
+
+  const html = [
+'<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">',
+'<meta name="viewport" content="width=device-width,initial-scale=1">',
+'<title>' + title + '</title><style>',
+'html,body{margin:0;height:100%;overflow:hidden;background:' + PAPER + ';color:#4A4A50;',
+'font:400 13px/1.5 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}',
+'#vp{position:absolute;inset:0;overflow:hidden;touch-action:none}',
+/* view 是「画面」容器：canvas / 对照层 / 分界线都放里面，一次 transform 全部同步 */
+'#view{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}',
+'/* canvas 必须撑满 #view：否则它按自身属性尺寸(如 600x900)溢出，\n'
++ '   而 #view 是按 fit 尺寸定位的，两套尺寸不一致 → 画面偏移、边缘露白。 */',
+'#c{display:block;width:100%;height:100%}',
+/* 对照层：原图铺满整个画面，靠 clipPath 控制左侧露出多少 */
+'#ghost{position:absolute;inset:0;background-size:100% 100%;background-repeat:no-repeat;display:none;' + ghostCss + '}',
+'#split{position:absolute;top:0;bottom:0;width:2px;background:rgba(0,0,0,.34);cursor:ew-resize;display:none;z-index:3}',
+'#split b{position:absolute;top:50%;left:50%;width:24px;height:24px;transform:translate(-50%,-50%);',
+'border:1px solid rgba(0,0,0,.35);background:rgba(255,255,255,.9);border-radius:50%}',
+/* 双栏时的右栏：完整原图 */
+'#side{position:absolute;top:0;bottom:0;left:calc(50% + 7px);right:0;display:none;align-items:center;justify-content:center}',
+'#side img{display:block}',
+'#side .tag{position:absolute;left:8px;bottom:10px;font:400 10px Consolas,monospace;color:#6E6E76}',
+'.zb{position:absolute;right:10px;bottom:10px;z-index:6;display:flex;align-items:center;gap:2px;',
+'background:rgba(250,250,250,.94);border:1px solid rgba(0,0,0,.13);padding:3px;border-radius:2px}',
+'.zb button{font:inherit;font-size:12px;line-height:1;color:#4A4A50;padding:5px 7px;border:0;background:none;cursor:pointer}',
+'.zb button:hover{background:rgba(0,0,0,.07)}',
+'.zb .lvl{font-size:11px;min-width:44px;text-align:center;color:#6E6E76}',
+'#gb{position:absolute;left:10px;bottom:10px;z-index:6;font:inherit;font-size:12px;padding:5px 11px;',
+'border:1px solid rgba(0,0,0,.14);background:rgba(250,250,250,.94);color:#6E6E76;cursor:pointer;border-radius:2px}',
+'#gb.on{border-color:rgba(0,0,0,.45);color:#1A1A1A;font-weight:500}',
+'#hud{position:absolute;left:0;right:0;top:0;padding:9px 14px;display:flex;justify-content:space-between;',
+'font:400 11px Consolas,monospace;color:#6E6E76;pointer-events:none;z-index:5}',
+'#ttl{position:absolute;left:50%;top:9px;transform:translateX(-50%);font:400 11px Consolas,monospace;',
+'color:#5E5E63;pointer-events:none;z-index:5}',
+'</style></head><body>',
+'<div id="vp"><div id="view">',
+'<canvas id="c" width="' + W + '" height="' + H + '"></canvas>',
+'<div id="ghost"></div><div id="split"><b></b></div>',
+'</div></div>',
+(srcUrl ? '<div id="side"><span class="tag">原图</span><img id="sideimg" alt="原图"></div>' : ''),
+'<div id="hud"><span id="p">0%</span><span id="k">0 笔</span></div>',
+'<div id="ttl">' + title + '</div>',
+'<div class="zb">',
+'<button id="zOut" title="缩小">−</button><span class="lvl" id="zLvl">100%</span>',
+'<button id="zIn" title="放大">＋</button>',
+'<button id="zFit" title="适应窗口（按 0）">⤢</button>',
+'<button id="zRst" title="实际大小（按 1）">1:1</button>',
+'<button id="zFs" title="全屏（按 F）">⛶</button>',
+'</div>',
+(srcUrl ? '<button id="gb" title="显示/隐藏原图对照">对照</button>' : ''),
+'<script>(function(){',
+'var B=' + data + ',DUR=' + dur + ',N=B.length;',
+'var W=' + W + ',H=' + H + ';',
+'var cv=document.getElementById("c"),cx=cv.getContext("2d");',
+'var VIEW=document.getElementById("view"),VP=document.getElementById("vp");',
+'var gh=document.getElementById("ghost"),sp=document.getElementById("split");',
+'var sd=document.getElementById("side");',
+'if(sd){var si=document.getElementById("sideimg");if(si)si.src="' + (srcUrl || '') + '";}',
+'var zoom={s:1,tx:0,ty:0},fitScale=1,fitW=W,fitH=H,ghostOn=true,GAP=14,ZMAX=24;',
+'function vpW(){return sideMode()?(innerWidth-GAP)/2:innerWidth;}',
+'/* 双栏阈值：原版 1000 是按独立全窗口定的；被宿主页嵌进 iframe 后可用宽度\n'
++ '   会扣掉左栏，放宽到 800 才能让宽屏下的并排对照真正生效。 */',
+'function sideMode(){return !!sd&&ghostOn&&innerWidth>=800&&(innerWidth/innerHeight)>=1.0;}',
+'function report(){try{parent.postMessage({type:"zoom:state",s:zoom.s,fit:fitScale},"*");}catch(e){}}',
+'function layout(){',
+'  var dual=sideMode(),vw=vpW();',
+'  if(dual&&sd){sd.style.display="flex";gh.style.display="none";sp.style.display="none";}',
+'  else{sd.style.display="none";gh.style.display=ghostOn?"block":"none";sp.style.display=ghostOn?"block":"none";}',
+'  var s=Math.min(vw/W,innerHeight/H);fitScale=s;',
+'  fitW=Math.max(1,Math.round(W*s));fitH=Math.max(1,Math.round(H*s));',
+'  VIEW.style.width=fitW+"px";VIEW.style.height=fitH+"px";',
+'  if(dual&&si){si.style.width=fitW+"px";si.style.height=fitH+"px";}',
+'  clampPan();applyView();',
+'}',
+'function clampPan(){',
+'  var vw=vpW(),sw=fitW*zoom.s,sh=fitH*zoom.s;',
+'  var mx=Math.max(0,(sw-vw)/2),my=Math.max(0,(sh-innerHeight)/2);',
+'  zoom.tx=Math.min(mx,Math.max(-mx,zoom.tx));',
+'  zoom.ty=Math.min(my,Math.max(-my,zoom.ty));',
+'}',
+'function applyView(){',
+'  var vw=vpW();',
+'  var bx=vw/2-fitW*zoom.s/2+zoom.tx,by=innerHeight/2-fitH*zoom.s/2+zoom.ty;',
+'  VIEW.style.transform="translate("+bx+"px,"+by+"px) scale("+zoom.s+")";',
+'  document.getElementById("zLvl").textContent=Math.round(zoom.s*100)+"%";',
+'  report();',
+'}',
+'/* 以屏幕点 (ax,ay) 为锚点缩放：锚点下的画面内容保持不动 */',
+'function setZoomAt(ns,ax,ay){',
+'  ns=Math.min(ZMAX,Math.max(1,ns));',
+'  var vw=vpW();if(ax===undefined){ax=vw/2;ay=innerHeight/2;}',
+'  var bx0=vw/2-fitW*zoom.s/2+zoom.tx,by0=innerHeight/2-fitH*zoom.s/2+zoom.ty;',
+'  var px=(ax-bx0)/zoom.s,py=(ay-by0)/zoom.s;',
+'  zoom.s=ns;',
+'  zoom.tx=(ax-px*zoom.s)-(vw/2-fitW*zoom.s/2);',
+'  zoom.ty=(ay-py*zoom.s)-(innerHeight/2-fitH*zoom.s/2);',
+'  clampPan();applyView();',
+'}',
+'/* ---- 播放 ---- */',
+'var t=0,playing=false,speed=1,draw=0,last=0;',
+'function renderTo(n){cx.clearRect(0,0,W,H);cx.fillStyle="' + PAPER + '";cx.fillRect(0,0,W,H);',
+'for(var i=0;i<n&&i<N;i++){var b=B[i];cx.fillStyle=b[4];cx.fillRect(b[0],b[1],b[2],b[3]);}}',
+'function hud(){document.getElementById("p").textContent=Math.round(t/DUR*100)+"%";',
+'document.getElementById("k").textContent=Math.round(draw)+" 笔";}',
+'function loop(ts){if(!last)last=ts;var dt=(ts-last)/1000;last=ts;',
+'if(playing){t+=dt*speed;if(t>=DUR){t=DUR;playing=false;}draw=t/DUR*N;renderTo(Math.round(draw));hud();}',
+'requestAnimationFrame(loop);}',
+'/* ---- 滚轮缩放（以指针为锚点）---- */',
+'VP.addEventListener("wheel",function(e){e.preventDefault();',
+'  setZoomAt(zoom.s*(e.deltaY<0?1.12:1/1.12),e.clientX,e.clientY);},{passive:false});',
+'/* ---- 拖动平移 / 拖动分界线 ---- */',
+'var drag=null,ptrs={},pinch=null;',
+'function twoPtr(){var k=Object.keys(ptrs);return k.length>=2?[ptrs[k[0]],ptrs[k[1]]]:null;}',
+'function setSplit(clientX){var r=VIEW.getBoundingClientRect();',
+'  var x=Math.max(0,Math.min(1,(clientX-r.left)/r.width));',
+'  gh.style.clipPath="inset(0 0 0 "+(x*100)+"%)";sp.style.left=(x*100)+"%";}',
+'VP.addEventListener("pointerdown",function(e){',
+'  ptrs[e.pointerId]={x:e.clientX,y:e.clientY};',
+'  var tp=twoPtr();',
+'  if(tp){                                   /* 两指落下：切成捏合模式，取消平移 */',
+'    pinch={d:Math.hypot(tp[0].x-tp[1].x,tp[0].y-tp[1].y),s:zoom.s,',
+'           cx:(tp[0].x+tp[1].x)/2,cy:(tp[0].y+tp[1].y)/2};',
+'    drag=null;pause();return;',
+'  }',
+'  if(ghostOn&&(e.target===sp||e.target.parentNode===sp)){drag={mode:"split"};sp.setPointerCapture(e.pointerId);pause();setSplit(e.clientX);return;}',
+'  if(e.button!==0)return;drag={mode:"pan",x:e.clientX,y:e.clientY,tx:zoom.tx,ty:zoom.ty};',
+'  VP.setPointerCapture(e.pointerId);pause();',
+'});',
+'VP.addEventListener("pointermove",function(e){',
+'  if(ptrs[e.pointerId])ptrs[e.pointerId]={x:e.clientX,y:e.clientY};',
+'  if(pinch){',
+'    var tp=twoPtr();if(!tp)return;',
+'    var d=Math.hypot(tp[0].x-tp[1].x,tp[0].y-tp[1].y);',
+'    if(pinch.d>0)setZoomAt(pinch.s*(d/pinch.d),pinch.cx,pinch.cy);',
+'    return;',
+'  }',
+'  if(!drag)return;',
+'  if(drag.mode==="split"){setSplit(e.clientX);return;}',
+'  zoom.tx=drag.tx+(e.clientX-drag.x);zoom.ty=drag.ty+(e.clientY-drag.y);clampPan();applyView();});',
+'function endDrag(e){',
+'  if(e&&e.pointerId!==undefined)delete ptrs[e.pointerId];',
+'  if(!twoPtr())pinch=null;',
+'  drag=null;',
+'}',
+'VP.addEventListener("pointerup",endDrag);VP.addEventListener("pointercancel",endDrag);',
+'VP.addEventListener("dblclick",function(e){pause();',
+'  setZoomAt(zoom.s>1.02?1:2.5,e.clientX,e.clientY);});',
+'function pause(){playing=false;}',
+'/* ---- 控件 ---- */',
+'document.getElementById("zIn").onclick=function(){setZoomAt(zoom.s*1.4);};',
+'document.getElementById("zOut").onclick=function(){setZoomAt(zoom.s/1.4);};',
+'document.getElementById("zFit").onclick=function(){zoom.s=1;zoom.tx=0;zoom.ty=0;clampPan();applyView();};',
+'document.getElementById("zRst").onclick=function(){setZoomAt(1/fitScale);};',
+'var zfs=document.getElementById("zFs");',
+'if(zfs)zfs.onclick=function(){try{parent.postMessage({type:"art:fullscreen"},"*");}catch(e){}};',
+'var gb=document.getElementById("gb");',
+'if(gb)gb.onclick=function(){setGhost(!ghostOn);};',
+'function setGhost(on){ghostOn=on;if(gb){gb.classList.toggle("on",on);}layout();',
+'  if(on){gh.style.clipPath="inset(0 0 0 50%)";sp.style.left="50%";}',
+'  try{parent.postMessage({type:"ghost:state",on:on},"*");}catch(e){}}',
+'/* ---- 键盘 ---- */',
+'window.addEventListener("keydown",function(e){',
+'  if(e.key==="0"){e.preventDefault();pause();zoom.s=1;zoom.tx=0;zoom.ty=0;clampPan();applyView();}',
+'  else if(e.key==="1"){e.preventDefault();pause();setZoomAt(1/fitScale);}',
+'  else if(e.key==="+"||e.key==="="){e.preventDefault();pause();setZoomAt(zoom.s*1.4);}',
+'  else if(e.key==="-"||e.key==="_"){e.preventDefault();pause();setZoomAt(zoom.s/1.4);}',
+'  else if(e.key===" "){e.preventDefault();playing=!playing;if(playing&&t>=DUR)t=0;}',
+'  else if(e.key==="g"||e.key==="G"){if(gb)setGhost(!ghostOn);}',
+'  else if(e.key==="f"||e.key==="F"){e.preventDefault();try{parent.postMessage({type:"art:fullscreen"},"*");}catch(_){}}',
+'});',
+'window.addEventListener("resize",layout);',
+'/* ---- 接收宿主页指令 ---- */',
+'window.addEventListener("message",function(e){var d=e.data;if(!d||!d.type)return;',
+'if(d.type==="replay:play"){if(t>=DUR)t=0;playing=true;}',
+'else if(d.type==="replay:pause"){playing=false;}',
+'else if(d.type==="replay:seek"){t=Math.max(0,Math.min(DUR,d.t));draw=t/DUR*N;renderTo(Math.round(draw));hud();}',
+'else if(d.type==="replay:speed"){speed=d.v||1;}',
+'else if(d.type==="zoom:in"){setZoomAt(zoom.s*1.4);}',
+'else if(d.type==="zoom:out"){setZoomAt(zoom.s/1.4);}',
+'else if(d.type==="zoom:fit"){zoom.s=1;zoom.tx=0;zoom.ty=0;clampPan();applyView();}',
+'else if(d.type==="zoom:1"){setZoomAt(1/fitScale);}',
+'else if(d.type==="zoom:set"){setZoomAt(d.v);}',
+'else if(d.type==="ghost:set"){setGhost(!!d.on);}',
+'else if(d.type==="art:fullscreen"){parent.postMessage({type:"art:fullscreen"},"*");}',
+'});',
+'/* 生成完先呈现完整作品（而不是空白首帧）—— 否则用户看到一片空白会以为没生成。\n'
++ '   点播放时 replay:play 会把 t 归零，再从头逐笔绘制。 */',
+'t=DUR;draw=N;renderTo(N);hud();setGhost(true);requestAnimationFrame(loop);',
+'setInterval(function(){try{parent.postMessage({type:"replay:tick",t:t,total:DUR,playing:playing},"*");}catch(e){}},250);',
+'})();<\/script></body></html>'
+  ].join('');
+
+  return { svg, html, strokes: blocks.length, size: [W, H] };
+}
+
+/* 读用户选的图：拿到真实宽高，并生成一张缩小版用于「原图对照」。
+   对照层要嵌进回放页，所以用 dataURL 自带，避免依赖外部文件。 */
+function analyzeSrc(buf){
+  return new Promise((res) => {
+    const url = URL.createObjectURL(new Blob([buf]));
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth || 1200, h = img.naturalHeight || 1600;
+      const N = 900, s = Math.min(1, N / Math.max(w, h));
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(w * s));
+      cv.height = Math.max(1, Math.round(h * s));
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      URL.revokeObjectURL(url);
+      let ghost = '';
+      try{ ghost = cv.toDataURL('image/jpeg', 0.72); }catch(_){}
+      res({ w: w, h: h, ghost: ghost });
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); res({ w:1200, h:1600, ghost:'' }); };
+    img.src = url;
+  });
+}
+
+/* 按真 Worker 的协议，把模拟结果分步发出去 */
+function runMock(buf, opts){
+  const msg = (o) => worker.onmessage && worker.onmessage({ data: o });
+  let step = 0;
+  const steps = [
+    () => msg({ type:'status', text:'读取文件…' }),
+    () => { msg({ type:'cache', state:'miss', stats:{ bytes: 22020096, files: 42 } }); },
+    () => msg({ type:'log', text:'载入运行时 Pyodide · numpy · OpenCV · Pillow' }),
+    () => msg({ type:'log', text:'量化到 48 色 · 提取轮廓' }),
+    () => msg({ type:'log', text:'底板 ' + PAPER + '（固定纸白）· 一笔不省' }),
+    () => msg({ type:'log', text:'追踪线稿折线（Canny + polyline）' }),
+    () => msg({ type:'log', text:'按视觉重量分配时间轴…' }),
+  ];
+  const timer = setInterval(async () => {
+    if(step < steps.length){ steps[step++](); return; }
+    clearInterval(timer);
+    // 进度推进
+    let p = 0;
+    const pt = setInterval(async () => {
+      p += 0.14 + Math.random() * 0.1;
+      if(p >= 1){
+        clearInterval(pt);
+        msg({ type:'log', text: JSON.stringify({ _progress: 1 }) });
+        const src = await analyzeSrc(buf);
+        // 画布尺寸：按「矢量精细度」把长边缩到上限（「最高」档 = 不缩放）
+        // 注意用 != null 判断而不是真值判断：「最高·原样」这一档的 maxWidth 就是 0，
+        // 用 `opts.maxWidth ?` 会把 0 当成「没传」，于是仍然缩到 1200，这一档形同虚设。
+        const mw = (opts && opts.maxWidth != null) ? opts.maxWidth : 1200;
+        let W = src.w, H = src.h;
+        if(mw > 0 && Math.max(W, H) > mw){
+          const k = mw / Math.max(W, H);
+          W = Math.max(1, Math.round(W * k));
+          H = Math.max(1, Math.round(H * k));
+        }
+        const art = mockArtwork(W, H, src.ghost, opts && opts.title);
+        msg({ type:'done',
+              svg: art.svg, html: art.html,
+              svgBytes: art.svg.length, htmlBytes: art.html.length,
+              strokes: art.strokes, size: art.size });
+        return;
+      }
+      msg({ type:'log', text: JSON.stringify({ _progress: p }) });
+    }, 260);
+  }, 420);
+}
+
+/* ---------------- Worker ---------------- */
+function boot(){
+  // 单文件里通常没有 worker.js；探测一下，有就用真实现。
+  // file:// 下 fetch 行为不稳定（可能直接 reject，也可能长时间挂起），
+  // 所以加一道超时兜底，保证一定会落到模拟器。
+  let settled = false;
+  const useMock = () => { if(settled) return; settled = true; mockWorker(); };
+  const timer = setTimeout(useMock, 2500);
+  try{
+    fetch('worker.js', { method:'HEAD' })
+      .then(r => {
+        /* 有些静态托管对 HEAD 一律回 405 —— 那时不能据此认定「没有 worker.js」，
+           否则会静默退化成演示模拟器（用户拿到的是演示图而不是自己的作品）。
+           405 时换带 Range 的 GET 再问一次，只取 1 个字节，不会真把文件拉下来。 */
+        if(r.status !== 405) return r;
+        return fetch('worker.js', { headers: { Range: 'bytes=0-0' } });
+      })
+      .then(r => {
+        if(settled) return;
+        if(r.ok){ settled = true; clearTimeout(timer); realWorker(); }
+        else { clearTimeout(timer); useMock(); }
+      })
+      .catch(() => { clearTimeout(timer); useMock(); });
+  }catch(_){ clearTimeout(timer); useMock(); }
+}
+
+function realWorker(){
+  mockMode = false;
+  worker = new Worker('worker.js', { type:'module' });
+  worker.onmessage = onWorkerMessage;
+  worker.onerror = (e) => {
+    // 必须把 busy 放掉：本版 show() 在 busy 时会拦住换图，go 又是 disabled，
+    // 不重置的话 worker 一旦启动失败（脚本异常 / Pyodide OOM），用户既不能重试
+    // 也不能换图，只能刷新整个页面。注意 message 里的 type==='error' 那条路径
+    // 本来就重置了 busy，只有这里的 onerror 漏了。
     busy = false;
-    go.disabled = false;
-    go.textContent = '再生成一次';
-    barFill.style.width = '100%';
-    status.textContent = '完成';
-
-    const svgBlob = new Blob([m.svg], { type: 'image/svg+xml' });
-    const htmlBlob = new Blob([m.html], { type: 'text/html' });
-    lastHtmlText = new TextDecoder().decode(m.html);   // 预览走 srcdoc，见 openPreview
-    const name = ($('title').value || 'artwork').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40) || 'artwork';
-
-    const urlSvg = URL.createObjectURL(svgBlob);
-    const urlHtml = URL.createObjectURL(htmlBlob);
-    const a1 = $('dlSvg'), a2 = $('dlHtml');
-    a1.href = urlSvg;  a1.download = name + '.svg';
-    a2.href = urlHtml; a2.download = name + '.html';
-    // 用 <a target="_blank"> 而不是 window.open：不会被弹窗拦截，手机浏览器也更稳
-    $('openHtml').href = urlHtml;
-    $('szSvg').textContent = mb(m.svgBytes);
-    $('szHtml').textContent = mb(m.htmlBytes);
-    $('doneNote').textContent =
-      m.strokes.toLocaleString() + ' 个色块 · 画布 ' + m.size.join('×') +
-      ' · 回放页可直接在手机或电脑打开';
-
-    $('frame').srcdoc = lastHtmlText;   // 结果卡的预览同样走 srcdoc（WebView 会拦 blob）
-    $('result').style.display = 'block';
-    $('outCard').classList.add('hasResult');
-
-    // 存进历史（缩略图取用户选的原图）
-    const thumb = file ? await thumbOf(file) : '';
-    await saveHistory({
-      id: 'r' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
-      name, title: $('title').value || 'artwork',
-      strokes: m.strokes, dims: m.size.join('×'),
-      thumb,
-    }, { svg: svgBlob, html: htmlBlob });
-  }
-
-  /* ---------- 开始 ---------- */
-  go.addEventListener('click', async () => {
-    if(!file || !ready || busy) return;
-    busy = true; go.disabled = true;
-    $('result').style.display = 'none';
-    $('outCard').classList.remove('hasResult');   // 生成中：结果卡回到引导区，完成了再亮结果
-    $('progWrap').style.display = 'block';
-    logEl.innerHTML = '';
-    barFill.style.width = '0%';
+    clearTimeout(genTimer);
+    /* ready 一并置回 false：worker 已经终止了，再点「重试」只是往一个死掉的
+       Worker 里 postMessage（消息被丢弃），然后 busy 又永久为真。
+       置 false 后按钮保持禁用，至少不会让用户以为还能点。 */
+    ready = false;
+    go.disabled = true;
+    goText.textContent = '重新生成';
+    estTotal = 0;
+    hudPulse.classList.add('idle');
+    hudCount.textContent = '启动失败';   // 别把上一轮的「已绘制 N 笔」留在 HUD 上
+    hudPct.textContent = '';
     bar.classList.remove('indet');
-    status.textContent = '读取文件…';
+    barFill.style.width = '0%';
+    statusEl.innerHTML = '<span class="err">启动失败</span>';
+    // .badge.err 原本是条死 CSS（全文件没有任何代码加过这个类），启动失败正该用它
+    $('engineBadge').classList.remove('on');
+    $('engineBadge').classList.add('err');
+    $('engineText').textContent = '运行时启动失败';
+    say('生成器未能启动：' + String(e.message || e), 'err');
+    // 不能只写「重试」：Worker 脚本加载失败后无法原地重启，得刷新页面
+    toast('生成器启动失败，刷新页面后重试', true);
+  };
+  worker.postMessage({ type:'boot' });
+}
 
-    const buf = await file.arrayBuffer();
-    const m = /\.([a-z0-9]+)$/i.exec(file.name);
-    worker.postMessage({
-      type: 'run',
-      data: buf,
-      ext: '.' + (m ? m[1].toLowerCase() : 'png'),
-      name: 'artwork',
-      title: $('title').value || '逐笔绘制回放',
-      duration: parseInt($('duration').value, 10) || 90,
-      maxWidth: parseInt(maxWidth, 10),
-      preprocess: preprocess,
-    }, [buf]);
-  });
-
-  $('clearCache').addEventListener('click', () => {
-    if(!worker) return;
-    if(!confirm('清除已缓存的 Python 运行时（约 21 MB）？\n\n' +
-                '下次打开需要重新下载，换不来任何好处，除非你遇到了加载异常。')) return;
-    $('clearCache').disabled = true;
-    worker.postMessage({ type: 'clearcache' });
-  });
-
-  /* 启动 */
-  (async () => {
-    try{
-      db = await openDB();
-      await renderHistory();
-    }catch(e){
-      console.warn('历史功能不可用：', e);
+function mockWorker(){
+  mockMode = true;
+  worker = {
+    onmessage: onWorkerMessage,      // 关键：不挂这个，模拟器发出的消息没人接
+    postMessage(m){
+      if(m.type === 'boot'){
+        setTimeout(() => worker.onmessage({ data:{ type:'status', text:'正在准备内置演示运行时…' } }), 200);
+        setTimeout(() => worker.onmessage({ data:{ type:'ready' } }), 1100);
+      } else if(m.type === 'cachesummary'){
+        setTimeout(() => worker.onmessage({ data:{
+          type:'cacheinfo', count: 0, bytes: 0, supported: true, demo: true } }), 120);
+      } else if(m.type === 'clearcache'){
+        setTimeout(() => worker.onmessage({ data:{ type:'cachecleared', freed: 22020096 } }), 400);
+      } else if(m.type === 'run'){
+        runMock(m.data, m);
+      }
     }
-    boot();
-  })();
+  };
+  worker.postMessage({ type:'boot' });
+}
+
+/* 生成看门狗 -------------------------------------------------------------
+ * worker 万一既不回 done 也不回 error（脚本内部抛错后线程僵住、Pyodide 崩溃、
+ * 内存耗尽被系统干掉），busy 会永久为真 —— 生成键一直「生成中」、连换图都被拦，
+ * 用户除了刷新页面没有别的出路。正常生成最长也就几分钟，所以给 8 分钟无消息就放手。 */
+let genTimer = null;
+function bumpWatchdog(){
+  clearTimeout(genTimer);
+  genTimer = setTimeout(() => {
+    if(!busy) return;
+    busy = false;
+    go.disabled = !file || !ready;
+    goText.textContent = '重新生成';
+    hudPulse.classList.add('idle');
+    bar.classList.remove('indet');
+    statusEl.innerHTML = '<span class="err">超时</span>';
+    say('超过 8 分钟没有任何进展，已停止等待。', 'err');
+    toast('生成超时了，请重试或换一张小一点的图', true);
+  }, 8 * 60 * 1000);
+}
+
+function onWorkerMessage(ev){
+  const m = ev.data;
+  // 每收到一条进展就重新计时；终结消息在各自的分支里停表
+  if(busy && m.type !== 'done' && m.type !== 'error') bumpWatchdog();
+  if(m.type === 'status'){
+    statusEl.textContent = m.text;
+    bar.classList.add('indet');
+  } else if(m.type === 'dl'){
+    /* worker.js 在首次加载 Pyodide 运行时（约 21 MB）时会持续发这条。
+       以前没有这个分支，于是首次使用期间进度条只在两条 status 文案之间静默卡住，
+       用户完全看不出在下东西、还是已经死了。 */
+    const mb = (n) => (n / 1048576).toFixed(1);
+    const pct = m.total ? Math.round(m.got / m.total * 100) : null;
+    statusEl.textContent = '下载 ' + (m.label || '运行时') + '：' + mb(m.got) + ' / ' +
+      (m.total ? mb(m.total) : '?') + ' MB' + (pct === null ? '' : '（' + pct + '%）');
+    if(pct === null){ bar.classList.add('indet'); }
+    else { bar.classList.remove('indet'); barFill.style.width = pct + '%'; }
+  } else if(m.type === 'versions'){
+    // 依赖版本多半只对排查问题有用，丢进日志即可
+    const info = m.info || {};
+    const desc = Object.keys(info).slice(0, 6).map((k) => k + ' ' + info[k]).join(' · ');
+    if(desc) say('依赖：' + desc);
+  } else if(m.type === 'ready'){
+    ready = true;
+    bar.classList.remove('indet');
+    $('engineBadge').classList.add('on');
+    $('engineText').textContent = mockMode ? '演示运行时就绪' : 'Wasm 引擎就绪';
+    $('engineNote').textContent = mockMode
+      ? 'ENGINE: DEMO · 单文件内置（未检测到 worker.js）'
+      : 'ENGINE: LOCAL · WASM · NO UPLOAD';
+    $('rtLine').classList.add('ok');
+    $('clearCache').disabled = false;
+    go.disabled = !file;
+    if(!busy) statusEl.textContent = '就绪';
+    refreshCacheInfo();
+  } else if(m.type === 'cacheinfo'){
+    showCacheInfo(m);
+  } else if(m.type === 'cachecleared'){
+    $('clearCache').disabled = false;
+    showCacheInfo({ count:0, bytes:0, supported: true });   // 能收到这条就说明缓存可用
+    toast('已清除运行时缓存，释放 ' + fmtSize(m.freed || 0) + '。下次打开需要重新下载。');
+  } else if(m.type === 'cache'){
+    const s = m.stats || {};
+    if(m.state === 'hit'){
+      $('netInfo').innerHTML = '本次运行：已从本地缓存读取 <b>' + s.cached + '</b> 个文件（不消耗流量）';
+    } else {
+      $('netInfo').innerHTML = '本次运行：正在下载 <b>' + (s.bytes / 1048576).toFixed(1) +
+        ' MB</b>（' + s.files + ' 个文件），之后会缓存到本地';
+    }
+    $('memText').textContent = '内存消耗: ' + Math.round(120 + Math.random() * 60) + 'MB';
+  } else if(m.type === 'log'){
+    if(m.text.startsWith('{"_progress"')){
+      try{
+        const p = JSON.parse(m.text)._progress;
+        bar.classList.remove('indet');
+        barFill.style.width = (p * 100).toFixed(1) + '%';
+        statusEl.textContent = '生成中… ' + Math.round(p * 100) + '%';
+        setProgressUI(p);
+      }catch(_){}
+    } else {
+      say(m.text);
+    }
+  } else if(m.type === 'done'){
+    clearTimeout(genTimer);          // 有结果了，看门狗停表
+    onDone(m);
+  } else if(m.type === 'error'){
+    clearTimeout(genTimer);          // 明确报错了，看门狗停表
+    busy = false;
+    go.disabled = !file || !ready;
+    bar.classList.remove('indet');
+    statusEl.innerHTML = '<span class="err">出错了</span>';
+    say(m.text, 'err');
+    goText.textContent = '重试';
+    hudPulse.classList.add('idle');
+    hudCount.textContent = '出错了';    // 同上：清掉上一轮留下的笔数
+    hudPct.textContent = '';
+    $('engineBadge').classList.remove('on');
+    $('engineBadge').classList.add('err');
+    $('engineText').textContent = '运行时出错';
+  }
+}
+
+function showCacheInfo(m){
+  const el = $('rtText');
+  if(!m.supported){ el.textContent = '当前浏览器不支持本地缓存，每次都要下载。'; return; }
+  if(m.demo){
+    el.textContent = '演示模式：未检测到 worker.js，生成结果为内置示例。';
+    $('rtLine').classList.add('ok');
+    return;
+  }
+  if(m.count){
+    el.textContent = '✓ 运行时已缓存到本机：' + m.count + ' 个文件 · ' + fmtSize(m.bytes) + '，下次直接读取。';
+    $('rtLine').classList.add('ok');
+  } else {
+    el.textContent = '尚未缓存，本次会下载约 21 MB。';
+    $('rtLine').classList.remove('ok');
+  }
+}
+function refreshCacheInfo(){ if(worker) worker.postMessage({ type:'cachesummary' }); }
+
+/* ---------------- 生成完成 ---------------- */
+async function onDone(m){
+  busy = false;
+  go.disabled = false;
+  goText.textContent = '再生成一次';
+  barFill.style.width = '100%';
+  statusEl.textContent = '完成';
+  estTotal = m.strokes || 0;      // 拿到真实笔数后，HUD 才有可信的分母
+  setProgressUI(1);
+
+  const svgBlob = new Blob([m.svg], { type:'image/svg+xml' });
+  const htmlBlob = new Blob([m.html], { type:'text/html' });
+  // 真 worker 回传 ArrayBuffer，内置模拟器给的是字符串，两种都要兼容
+  lastHtmlText = (typeof m.html === 'string') ? m.html : new TextDecoder().decode(m.html);
+  const name = ($('title').value || 'artwork').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40) || 'artwork';
+
+  // 上一轮生成的回放页 URL 必须回收：每份 5~30MB，不回收会随生成次数线性累积。
+  // （SVG 那一份由 urlsOf 的 urlCache 接管，要到删除记录 / 清空历史时才回收。）
+  if(lastHtmlUrl) URL.revokeObjectURL(lastHtmlUrl);
+  const urlSvg = URL.createObjectURL(svgBlob);
+  const urlHtml = URL.createObjectURL(htmlBlob);
+  lastHtmlUrl = urlHtml;
+  $('dlSvg').href = urlSvg;   $('dlSvg').download = name + '.svg';
+  $('dlHtml').href = urlHtml; $('dlHtml').download = name + '.html';
+  $('openHtml').href = urlHtml;
+  $('szSvg').textContent = fmtSize(m.svgBytes);
+  $('szHtml').textContent = fmtSize(m.htmlBytes);
+
+  // 舞台：显示回放页
+  frame.srcdoc = lastHtmlText;
+  showViewport(true);
+  setToolsEnabled(true);
+  clearInterval(tickTimer);
+  probeRemote();               // 探一下这个回放页认不认外部指令，不认就把控制条降级
+
+  const dims = (m.size || [0,0]).join(' × ');
+  setHud('VIEWFINDER // RENDERED', 'SOURCE ' + (m.size || []).join('×'), 'CANVAS ' + dims + ' PT');
+  hudCount.textContent = '已绘制 ' + (m.strokes || 0).toLocaleString() + ' / ' +
+                          (m.strokes || 0).toLocaleString() + ' 笔';
+  hudPct.textContent = '(100.0%)';
+  hudPulse.classList.add('idle');   // 完成后停止脉冲；上面 setProgressUI(1) 已置 idle，别再摘掉
+  noteLeft.textContent = 'LOSSLESS · 矢量';
+  noteLeft.style.display = '';
+  noteRight.textContent = 'FRAME ' + String(m.strokes || 0).padStart(5, '0');
+  noteRight.style.display = '';
+
+  replay = { playing: false, t: 0, total: lastDuration, speed: 1 };
+  syncReplayUI();
+
+  // 存进历史（缩略图取用户选的原图）
+  const th = file ? await thumbOf(file) : '';
+  const recId = 'r' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+  currentRecId = recId;
+  /* 只登记 svg：html 那一格必须留 null —— 历史点击时由 htmlUrlOf() 填「升级后」的
+     版本。这里若把未升级的 urlHtml 填进去，htmlUrlOf 的 `if(u.html) return` 会直接
+     命中，升级链（时间轴 / 布局 / 底板色）全成死代码，下载到手的还是老页面。 */
+  urlCache.set(recId, { svg: urlSvg, html: null });
+  const saved = await saveHistory({
+    id: recId,
+    name, title: $('title').value || 'artwork',
+    strokes: m.strokes, dims: dims, thumb: th,
+    duration: lastDuration,       // 点开这条历史时，要拿它当底部进度条的分母
+  }, { svg: svgBlob, html: htmlBlob });
+  // 没写进库（配额不足等）就把它从 urlCache 摘掉：这条记录压根不在历史里，
+  // 删除 / 清空都碰不到它，留着就是一份永远没人回收的 objectURL。
+  if(!saved) dropUrls(recId);
+}
+
+/* ---------------- 开始生成 ---------------- */
+go.addEventListener('click', async () => {
+  if(!file || !ready || busy) return;
+  busy = true; go.disabled = true;
+  showEmpty();
+  setToolsEnabled(false);
+  $('progWrap').classList.add('show');
+  logEl.innerHTML = '';
+  barFill.style.width = '0%';
+  bar.classList.remove('indet');
+  statusEl.textContent = '读取文件…';
+  $('netInfo').textContent = '';
+  setHud('VIEWFINDER // TRACING', undefined, undefined);
+  estTotal = 0;                   // 清掉上一轮的笔数，本轮结果出来再填
+  setProgressUI(0);
+  hudPulse.classList.remove('idle');
+
+  const buf = await file.arrayBuffer();
+  const ext = (/\.([a-z0-9]+)$/i.exec(file.name) || [,'png'])[1].toLowerCase();
+  // 记下来：回放页的 DUR 用的是这个值，底部进度条的分母也必须用它。
+  // 直接读输入框的话，生成中改一次时长，两边比例就对不上了。
+  lastDuration = clampDuration($('duration').value);
+  // 钳过的值回写输入框：否则用户手键了 -5 或 99999，输入框还显示原值，
+  // 而实际用的是钳后的值，两边不一致却没有任何提示。
+  if(String($('duration').value) !== String(lastDuration)) $('duration').value = lastDuration;
+  worker.postMessage({
+    type:'run',
+    data: buf,
+    ext: '.' + ext,
+    name: 'artwork',
+    title: $('title').value || '逐笔绘制回放',
+    duration: lastDuration,
+    maxWidth: parseInt(maxWidth, 10),
+    preprocess: preprocess,
+  }, [buf]);
+  bumpWatchdog();          // 从这一刻起盯着，worker 不吭声就别一直卡在「生成中」
+});
+
+$('clearCache').addEventListener('click', () => {
+  if(!worker) return;
+  if(!confirm('清除已缓存的 Python 运行时（约 21 MB）？\n\n' +
+              '下次打开需要重新下载，换不来任何好处，除非你遇到了加载异常。')) return;
+  $('clearCache').disabled = true;
+  worker.postMessage({ type:'clearcache' });
+});
+
+/* IndexedDB 被禁用时 db 会保持 null，tx() 会抛 TypeError。这两个入口以前没有
+   try/catch，点了毫无反应、也没有任何提示 —— 包起来给用户一个明确交代。 */
+$('hPrune').addEventListener('click', async () => {
+  let before;
+  try{
+    before = await dbAll();
+  }catch(e){
+    toast('清理失败：历史功能当前不可用', true);
+    return;
+  }
+  if(!before.length){ toast('还没有生成记录'); return; }
+  const beforeBytes = before.reduce((n, r) => n + (r.size || 0), 0);
+  /* 这是能一次删掉最多 MAX_ITEMS 条记录的破坏性操作，必须先确认、并把规则和体量说清楚
+     （原版就是这样，之前的版本直接开删还只报「剩下几条」，用户不知道丢了什么）。 */
+  if(!confirm(
+    '当前 ' + before.length + ' 项，共 ' + fmtSize(beforeBytes) + '。\n\n' +
+    '将按「最多 ' + MAX_ITEMS + ' 项 / ' + fmtSize(MAX_BYTES) + '」的规则，' +
+    '删除最旧的记录直到符合上限。\n已下载到本地的文件不受影响。继续？')) return;
+  try{
+    const left = await prune();
+    await renderHistory();
+    const removed = before.length - left.length;
+    // 本来就在上限内时别说「已清理 0 项」，那看着像出错了
+    toast(removed ? ('已清理 ' + removed + ' 项，释放 ' + fmtSize(beforeBytes - left.reduce((n, r) => n + (r.size || 0), 0)))
+                  : '当前还不到上限，无需清理');
+  }catch(e){
+    toast('清理失败：历史功能当前不可用', true);
+  }
+});
+$('hClear').addEventListener('click', async () => {
+  let list;
+  try{
+    list = await dbAll();
+  }catch(e){
+    toast('清空失败：历史功能当前不可用', true);
+    return;
+  }
+  if(!list.length){ toast('还没有生成记录'); return; }
+  const bytes = list.reduce((n, r) => n + (r.size || 0), 0);
+  if(!confirm(
+    '清空全部 ' + list.length + ' 项生成历史，释放约 ' + fmtSize(bytes) + '？\n\n' +
+    '此操作不可撤销。已经下载到本地的文件不受影响。')) return;
+  try{
+    /* 用一次原子 clear()，而不是逐条 delete：逐条中途失败会留下「清了一半」的
+       状态，而且每条都要开一次事务。原版 index.html 用的就是 store.clear()。 */
+    await wrapReq(tx('readwrite').clear());
+  }catch(e){
+    toast('清空失败：历史功能当前不可用', true);
+    return;
+  }
+  // 清库只动 IndexedDB，内存里缓存的那些 objectURL 要单独回收
+  [...urlCache.keys()].forEach(dropUrls);
+  // 舞台上如果正摆着某条历史，它的 URL 刚被 revoke 掉了 —— 一起收回空态
+  if(currentRecId) showEmpty();
+  await renderHistory();
+  toast('历史已清空');
+});
+
+/* 窗口尺寸变化时重算底部控制条的比例显示。四角括号和网格都是绝对定位的纯 CSS，
+   不需要 JS 参与 —— 原来的注释写「保持角标和网格在位」，与实际做的事不符。 */
+window.addEventListener('resize', () => { syncReplayUI(); });
+
+/* ---------------- 启动 ---------------- */
+(async () => {
+  showEmpty();
+  syncReplayUI();
+  idleHud();
+  try{
+    db = await openDB();
+    await renderHistory();
+  }catch(e){
+    console.warn('历史功能不可用：', e);
+    $('hList').innerHTML = '<div class="hist-empty">历史功能不可用（IndexedDB 被禁用）</div>';
+  }
+  boot();
+})();
+
 })();
 </script>
 </body>

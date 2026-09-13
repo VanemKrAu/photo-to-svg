@@ -709,7 +709,12 @@ document.addEventListener("keydown",function(e){
 /* ---- 精确布局：按可用空间等比缩放画框（不依赖 aspect-ratio 的浏览器实现） ---- */
 var stageEl=document.querySelector(".stage"), sideEl=document.getElementById("side");
 function sideMode(){
-  return ghostOn && window.innerWidth>=1000 && (window.innerWidth/window.innerHeight)>=1.0;
+  /* 阈值 800 而不是 1000：这个回放页在网页版里是嵌在 iframe 里跑的，
+     iframe 宽 ≈ 窗口宽 − 416（左栏 + 内边距 + 边框）。要 1000 就意味着
+     窗口得宽到 1416 以上，于是 1280 和 1366 这类常见笔记本永远看不到
+     原图并排对照 —— 而这正是本工具的主要卖点之一。
+     800 让 1216 以上的窗口就能并排，两半各约 400px，够用。 */
+  return ghostOn && window.innerWidth>=800 && (window.innerWidth/window.innerHeight)>=1.0;
 }
 function layout(){
   var cs=getComputedStyle(stageEl);

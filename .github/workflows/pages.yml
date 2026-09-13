@@ -1,5 +1,12 @@
 name: 构建并发布到 GitHub Pages
 
+# 双版本发布：两个版本的网站同时在线，首页用哪个由下面的开关决定。
+#   - 新版（取景器版）  web/index.html          → 线上 /new.html
+#   - 老版（经典版）    web/index-classic.html  → 线上 /classic.html
+#   - 首页 /            按 site_version 指向其中一个
+# 切换首页：Actions → 本工作流 → Run workflow → 选 new / classic。
+# 不改任何代码就能来回切，也不影响另一版继续在线。
+
 on:
   push:
     branches: [main]
@@ -9,6 +16,15 @@ on:
       - 'skill/scripts/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
+    inputs:
+      site_version:
+        description: '把哪个版本放到网站首页（另一版仍然可以在 /new.html 或 /classic.html 访问）'
+        required: true
+        default: 'new'
+        type: choice
+        options:
+          - new
+          - classic
 
 permissions:
   contents: read
@@ -29,8 +45,24 @@ jobs:
         run: |
           set -e
           rm -rf _site && mkdir -p _site/tools _site/scripts
-          # 网站本体
-          cp web/index.html web/worker.js web/web_run.py _site/
+
+          # 两个版本都发布，互为备份
+          cp web/index.html         _site/new.html
+          cp web/index-classic.html _site/classic.html
+
+          # 首页指向选定版本；push 触发时没有输入，默认新版
+          VER="${{ inputs.site_version }}"
+          if [ -z "$VER" ]; then VER="new"; fi
+          if [ "$VER" = "classic" ]; then
+            cp web/index-classic.html _site/index.html
+            echo "首页 = 老版（classic）"
+          else
+            cp web/index.html _site/index.html
+            echo "首页 = 新版（new）"
+          fi
+
+          # 两版共用的运行时与流水线
+          cp web/worker.js web/web_run.py _site/
           # 站点图标（浏览器标签页 / iOS 加到主屏）
           cp web/favicon.ico web/apple-touch-icon.png _site/
           # 流水线脚本（与仓库里同一份，不复制一份改过的）
@@ -45,14 +77,20 @@ jobs:
         run: |
           set -e
           fail=0
-          for f in index.html worker.js web_run.py tools/build_svg_art.py \
-                   tools/svg2canvas.py scripts/css_art/regions.py \
-                   scripts/css_art/geometry.py scripts/css_art/quality.py \
-                   scripts/css_art/render.py scripts/css_art/audit.py \
-                   scripts/css_art/cli.py scripts/css_art/__init__.py \
-                   favicon.ico apple-touch-icon.png; do
+          for f in index.html new.html classic.html worker.js web_run.py \
+                   tools/build_svg_art.py tools/svg2canvas.py \
+                   scripts/css_art/regions.py scripts/css_art/geometry.py \
+                   scripts/css_art/quality.py scripts/css_art/render.py \
+                   scripts/css_art/audit.py scripts/css_art/cli.py \
+                   scripts/css_art/__init__.py favicon.ico apple-touch-icon.png; do
             if [ -f "_site/$f" ]; then echo "  OK  $f"; else echo "  缺  $f"; fail=1; fi
           done
+          # 首页必须是两个版本之一，不能是空壳
+          if [ ! -s "_site/index.html" ]; then echo "  首页为空"; fail=1; fi
+          if [ ! -s "_site/new.html" ] || [ ! -s "_site/classic.html" ]; then
+            echo "  两个版本的页面都必须存在"; fail=1
+          fi
+          echo "  首页大小 $(wc -c < _site/index.html) 字节 / 新版 $(wc -c < _site/new.html) / 老版 $(wc -c < _site/classic.html)"
           # 核对 worker.js 里列的文件清单与实际发布内容一致
           python3 - <<'PY'
           import re, os, sys

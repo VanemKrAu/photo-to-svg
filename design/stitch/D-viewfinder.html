@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>图片转 SVG - 取景器 Viewfinder</title>
+<!-- Tailwind CSS v3 with Plugins -->
+<script src="vendor/tailwind.js"></script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            graphite: '#131316',
+            surface: '#18181C',
+            'surface-dim': '#111114',
+            'surface-dark': '#0D0D0F',
+            hairline: '#26262B',
+            'hairline-subtle': 'rgba(255,255,255,0.06)',
+            'btn-primary': '#F2F2F0',
+            'text-muted': '#8E8E93',
+            'text-dim': '#5E5E63'
+          },
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'sans-serif'],
+            mono: ['Consolas','Courier New', 'SF Mono', 'Menlo', 'Consolas', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+<style data-purpose="custom-layout">
+    /* Architectural Viewfinder Crosshairs and Bracket Styling */
+    .viewfinder-corner-tl {
+      position: absolute;
+      top: -1px;
+      left: -1px;
+      width: 14px;
+      height: 14px;
+      border-top: 1.5px solid #E5E5E5;
+      border-left: 1.5px solid #E5E5E5;
+      pointer-events: none;
+    }
+    .viewfinder-corner-tr {
+      position: absolute;
+      top: -1px;
+      right: -1px;
+      width: 14px;
+      height: 14px;
+      border-top: 1.5px solid #E5E5E5;
+      border-right: 1.5px solid #E5E5E5;
+      pointer-events: none;
+    }
+    .viewfinder-corner-bl {
+      position: absolute;
+      bottom: -1px;
+      left: -1px;
+      width: 14px;
+      height: 14px;
+      border-bottom: 1.5px solid #E5E5E5;
+      border-left: 1.5px solid #E5E5E5;
+      pointer-events: none;
+    }
+    .viewfinder-corner-br {
+      position: absolute;
+      bottom: -1px;
+      right: -1px;
+      width: 14px;
+      height: 14px;
+      border-bottom: 1.5px solid #E5E5E5;
+      border-right: 1.5px solid #E5E5E5;
+      pointer-events: none;
+    }
+    .reticle-center::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 20px;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.25);
+      transform: translate(-50%, -50%);
+    }
+    .reticle-center::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 1px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.25);
+      transform: translate(-50%, -50%);
+    }
+    /* Pulse dot effect */
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 0.9; }
+      50% { opacity: 0.2; }
+    }
+    .status-pulsar {
+      animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+  </style>
+</head>
+<body class="bg-graphite text-[#EDEDED] antialiased h-screen w-screen overflow-hidden flex flex-col font-sans selection:bg-neutral-800 selection:text-neutral-100">
+<!-- BEGIN: MainHeader -->
+<header class="h-12 border-b border-hairline bg-surface flex items-center justify-between px-5 select-none shrink-0 z-20">
+<!-- Left: Brand Title & Philosophy -->
+<div class="flex items-center gap-6">
+<h1 class="font-medium text-sm text-white tracking-wide flex items-center gap-2">
+<span class="inline-block w-2.5 h-2.5 border border-white"></span>
+        图片转 SVG
+      </h1>
+<span class="text-xs text-text-muted hidden md:inline border-l border-hairline pl-4 font-normal">
+        把照片变成矢量 SVG，并回放整个作画过程 · 全部在你的浏览器里完成，图片不上传
+      </span>
+</div>
+<!-- Right: Runtime Status Badges -->
+<div class="flex items-center gap-4 text-xs font-mono">
+<div class="flex items-center gap-2 px-2.5 py-1 border border-hairline bg-graphite rounded-[2px] text-neutral-300">
+<span class="w-1.5 h-1.5 rounded-none bg-neutral-200"></span>
+<span>Wasm 引擎就绪</span>
+</div>
+<div class="text-text-dim text-[11px] hidden sm:block">
+        内存消耗: 142MB
+      </div>
+</div>
+</header>
+<!-- END: MainHeader -->
+<!-- BEGIN: MainBodyWorkspace -->
+<main class="flex-1 flex overflow-hidden">
+<!-- BEGIN: LeftSidebarControls -->
+<aside class="w-[370px] border-r border-hairline bg-graphite p-5 flex flex-col justify-between overflow-y-auto shrink-0 select-none">
+<div class="space-y-5">
+<!-- Image Picker Section -->
+<div class="space-y-2">
+<label class="text-xs font-normal text-text-muted">输入图像</label>
+<div class="border border-hairline bg-surface p-2 rounded-[2px] flex items-center gap-3 relative">
+<div class="w-12 h-16 shrink-0 bg-black border border-hairline overflow-hidden relative">
+<img alt="走廊人像缩略图" class="w-full h-full object-cover grayscale-[30%] contrast-125" src="vendor/img/img-8b1c9c4d68.jpg"/>
+</div>
+<div class="flex-1 min-w-0">
+<div class="text-xs text-white truncate font-medium">corridor_portrait_raw.jpg</div>
+<div class="text-[11px] font-mono text-text-muted mt-0.5">896 × 1200 · 2.4MB</div>
+<div class="mt-1.5 flex items-center gap-2">
+<span class="text-[10px] font-mono px-1.5 py-0.5 bg-[#1F1F24] border border-hairline text-neutral-400">已载入源图</span>
+</div>
+</div>
+</div>
+<!-- Secondary Dropzone Alternative -->
+<button class="w-full border border-dashed border-hairline hover:border-neutral-500 py-1.5 text-center text-xs text-text-muted transition-colors rounded-[2px]">
+            点击更换或拖入其他图片
+          </button>
+</div>
+<!-- Quality Selector (Exact 4 options) -->
+<div class="space-y-2">
+<div class="flex justify-between items-center">
+<label class="text-xs font-normal text-text-muted">矢量精细度</label>
+<span class="text-[10px] font-mono text-text-dim">采样网格</span>
+</div>
+<div class="grid grid-cols-2 gap-1.5">
+<!-- Option 1: 快速 -->
+<button class="p-2 text-left border border-hairline bg-surface hover:bg-[#1C1C22] rounded-[2px] transition-all">
+<div class="flex items-center justify-between text-xs text-neutral-300">
+<span>快速</span>
+<span class="font-mono text-[11px] text-text-muted">800</span>
+</div>
+<div class="text-[11px] text-text-dim mt-0.5">约 1 分钟</div>
+</button>
+<!-- Option 2: 标准 (Selected) -->
+<button class="p-2 text-left border border-white bg-[#1F1F24] rounded-[2px] relative transition-all">
+<div class="flex items-center justify-between text-xs font-medium text-white">
+<span>标准</span>
+<span class="font-mono text-[11px] text-neutral-200">1200</span>
+</div>
+<div class="text-[11px] text-neutral-400 mt-0.5">约 1.5 分钟</div>
+<span class="absolute top-1 right-1 w-1 h-1 bg-white"></span>
+</button>
+<!-- Option 3: 高清 -->
+<button class="p-2 text-left border border-hairline bg-surface hover:bg-[#1C1C22] rounded-[2px] transition-all">
+<div class="flex items-center justify-between text-xs text-neutral-300">
+<span>高清</span>
+<span class="font-mono text-[11px] text-text-muted">1600</span>
+</div>
+<div class="text-[11px] text-text-dim mt-0.5">约 2.5 分钟</div>
+</button>
+<!-- Option 4: 最高 -->
+<button class="p-2 text-left border border-hairline bg-surface hover:bg-[#1C1C22] rounded-[2px] transition-all">
+<div class="flex items-center justify-between text-xs text-neutral-300">
+<span>最高</span>
+<span class="font-mono text-[11px] text-text-muted">原样</span>
+</div>
+<div class="text-[11px] text-text-dim mt-0.5">不缩放 · 最清晰</div>
+</button>
+</div>
+</div>
+<!-- Image Type Selector Segmented Tabs -->
+<div class="space-y-2">
+<label class="text-xs font-normal text-text-muted">样式分类器</label>
+<div class="grid grid-cols-3 border border-hairline bg-surface p-0.5 rounded-[2px]">
+<!-- Tab 1 (Selected) -->
+<button class="py-1 text-xs font-medium text-white bg-[#222228] border border-white/40 rounded-[1px] text-center">
+              自动
+            </button>
+<!-- Tab 2 -->
+<button class="py-1 text-xs text-text-muted hover:text-white transition-colors text-center">
+              照片
+            </button>
+<!-- Tab 3 -->
+<button class="py-1 text-xs text-text-muted hover:text-white transition-colors text-center">
+              插画
+            </button>
+</div>
+<p class="text-[11px] leading-relaxed text-text-dim">
+            小图会被自动放大 2 倍再描摹（轮廓更顺、色块更干净）
+          </p>
+</div>
+<!-- Inputs: Title & Duration -->
+<div class="space-y-3 pt-1 border-t border-hairline">
+<div>
+<label class="block text-xs font-normal text-text-muted mb-1">标题</label>
+<input class="w-full bg-surface border border-hairline px-3 py-1.5 text-xs text-white rounded-[2px] focus:outline-none focus:border-neutral-400 font-sans" type="text" value="走廊人像"/>
+</div>
+<div>
+<label class="block text-xs font-normal text-text-muted mb-1">回放时长 (秒)</label>
+<input class="w-full bg-surface border border-hairline px-3 py-1.5 text-xs text-white rounded-[2px] focus:outline-none focus:border-neutral-400 font-mono" type="text" value="90"/>
+</div>
+</div>
+</div>
+<!-- Left Bottom Action Button -->
+<div class="pt-4 border-t border-hairline">
+<button class="w-full py-2.5 bg-btn-primary hover:bg-white text-graphite font-medium text-xs rounded-[2px] transition-colors tracking-wide flex items-center justify-center gap-2">
+<svg class="w-3.5 h-3.5 fill-current" viewbox="0 0 24 24">
+<polygon points="5 3 19 12 5 21 5 3"></polygon>
+</svg>
+          开始生成
+        </button>
+<div class="mt-2 text-center">
+<span class="text-[10px] font-mono text-text-dim tracking-tighter">ENGINE: ACCELERATED VECTOR-CORE 2.4.1</span>
+</div>
+</div>
+</aside>
+<!-- END: LeftSidebarControls -->
+<!-- BEGIN: RightCanvasStage -->
+<section class="flex-1 bg-surface-dark flex flex-col justify-between relative overflow-hidden">
+<!-- Stage HUD Header Info Overlay -->
+<div class="h-10 border-b border-hairline px-6 flex items-center justify-between text-xs text-text-muted select-none bg-surface-dim/70 backdrop-blur-sm z-10">
+<div class="flex items-center gap-4 font-mono text-[11px]">
+<span class="text-neutral-400 font-semibold tracking-wider">VIEWFINDER // TRACE_PASS_02</span>
+<span class="text-hairline">|</span>
+<span class="text-text-dim">ISO 100 · F/2.8 · 1/120s</span>
+<span class="text-hairline hidden md:inline">|</span>
+<span class="hidden md:inline text-text-dim">CANVAS 896 × 1200 PT</span>
+</div>
+<div class="flex items-center gap-3 font-mono text-xs">
+<span class="inline-block w-1.5 h-1.5 bg-white status-pulsar"></span>
+<span class="text-white">已绘制 128,430 / 172,471 笔</span>
+<span class="text-neutral-500 font-mono text-[11px]">(74.4%)</span>
+</div>
+</div>
+<!-- Viewfinder Canvas Presentation Area -->
+<div class="flex-1 flex items-center justify-center p-6 relative overflow-hidden">
+<!-- Subtle Alignment Grid & Axis Marks -->
+<div class="absolute inset-0 pointer-events-none opacity-10 flex items-center justify-center">
+<div class="w-full h-px bg-white"></div>
+<div class="h-full w-px bg-white absolute"></div>
+</div>
+<!-- Viewfinder Reticle Target Box -->
+<div class="relative max-h-full aspect-[896/1200] border border-white/20 bg-black/80 shadow-2xl flex items-center justify-center overflow-hidden">
+<!-- Viewfinder Corner Tick Marks -->
+<div class="viewfinder-corner-tl"></div>
+<div class="viewfinder-corner-tr"></div>
+<div class="viewfinder-corner-bl"></div>
+<div class="viewfinder-corner-br"></div>
+<!-- Mid-Point Camera Hash Marks -->
+<div class="absolute top-0 left-1/2 -translate-x-1/2 w-3 h-1 border-b border-white/50 pointer-events-none"></div>
+<div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-3 h-1 border-t border-white/50 pointer-events-none"></div>
+<div class="absolute left-0 top-1/2 -translate-y-1/2 h-3 w-1 border-r border-white/50 pointer-events-none"></div>
+<div class="absolute right-0 top-1/2 -translate-y-1/2 h-3 w-1 border-l border-white/50 pointer-events-none"></div>
+<!-- Base Mid-Trace Imagery (Fine art portrait with authentic vector overlay) -->
+<div class="relative w-full h-full">
+<!-- Underlying reference photo with atmospheric shadow -->
+<img alt="走廊微光人像" class="w-full h-full object-cover filter brightness-[0.92] contrast-[1.05]" src="vendor/img/img-8b1c9c4d68.jpg"/>
+<!-- Mid-trace In-Progress Vector Mask Overlay (Simulating real SVG strokes & active polygon trace) -->
+<svg class="absolute inset-0 w-full h-full pointer-events-none" fill="none" viewbox="0 0 896 1200" xmlns="http://www.w3.org/2000/svg">
+<!-- Background perimeter contour wires & raw vector hatching paths -->
+<g stroke="rgba(255, 255, 255, 0.28)" stroke-dasharray="2 3" stroke-width="0.8">
+<!-- Archway contour wires -->
+<path d="M 180 320 C 180 140, 716 140, 716 320"></path>
+<path d="M 210 330 C 210 170, 686 170, 686 330"></path>
+<!-- Corridor architectural lines -->
+<line x1="180" x2="180" y1="320" y2="920"></line>
+<line x1="716" x2="716" y1="320" y2="920"></line>
+<line x1="100" x2="260" y1="200" y2="400"></line>
+<line x1="796" x2="636" y1="200" y2="400"></line>
+<!-- Flagstone perspective hatching lines -->
+<line stroke-width="0.5" x1="160" x2="740" y1="1050" y2="1050"></line>
+<line stroke-width="0.5" x1="220" x2="680" y1="980" y2="980"></line>
+<line stroke-width="0.5" x1="270" x2="626" y1="910" y2="910"></line>
+<line stroke-width="0.5" x1="330" x2="566" y1="840" y2="840"></line>
+</g>
+<!-- In-progress stylized vector blocks (wet digital ink / polygon fills) -->
+<!-- Doorway glow warm vector blocking -->
+<polygon fill="rgba(217, 119, 6, 0.45)" points="325,290 475,290 475,560 325,560"></polygon>
+<polygon fill="rgba(251, 191, 36, 0.35)" points="340,305 460,305 460,540 340,540"></polygon>
+<!-- Silhouette Vector Block (Person with rim light curves) -->
+<!-- Shadow coat blocking -->
+<path d="M 390,390 Q 420,380 445,390 Q 470,410 495,445 L 530,590 L 580,735 L 550,775 L 360,775 L 340,610 L 380,440 Z" fill="rgba(10, 10, 12, 0.72)" stroke="rgba(255,255,255,0.4)" stroke-width="0.75"></path>
+<!-- Amber Rim Light active stroke highlights -->
+<path d="M 442,390 C 475,410 495,450 515,520 C 530,580 545,670 560,740" fill="none" opacity="0.95" stroke="#F59E0B" stroke-linecap="round" stroke-width="2.5"></path>
+<path d="M 444,385 C 455,370 472,360 488,380" fill="none" opacity="0.95" stroke="#FDE68A" stroke-linecap="round" stroke-width="2"></path>
+<path d="M 382,430 C 378,480 370,550 355,630" fill="none" stroke="rgba(245, 158, 11, 0.5)" stroke-width="1.5"></path>
+<!-- Active Tracing Scanner Pen Point HUD -->
+<circle cx="515" cy="520" fill="#FFFFFF" r="3"></circle>
+<circle class="animate-spin" cx="515" cy="520" r="12" stroke="#FFFFFF" stroke-dasharray="2 2" stroke-width="0.75" style="animation-duration: 6s;"></circle>
+<line stroke="rgba(255,255,255,0.6)" stroke-width="0.75" x1="515" x2="515" y1="500" y2="480"></line>
+<text fill="#E5E5E5" font-family="monospace" font-size="11" x="525" y="490">NODE_ID #128430 [x:515 y:520]</text>
+</svg>
+</div>
+<!-- Subtle On-canvas Coordinates HUD -->
+<div class="absolute bottom-3 left-3 font-mono text-[10px] text-white/50 tracking-wider pointer-events-none select-none">
+            LOC [44.8219° N, 0.3541° W] · FRAME 0847
+          </div>
+<div class="absolute bottom-3 right-3 font-mono text-[10px] text-white/50 tracking-wider pointer-events-none select-none">
+            COLOR_INDEX: 48/64
+          </div>
+</div>
+</div>
+<!-- BEGIN: ReplayToolbar -->
+<!-- Bottom Control Toolbar (Scrubber, playback, zoom) -->
+<div class="border-t border-hairline bg-surface-dim px-6 py-2.5 flex items-center justify-between gap-6 select-none z-10">
+<!-- Play / Scrub Controls -->
+<div class="flex items-center gap-4 flex-1">
+<!-- Play/Pause Button -->
+<button class="w-7 h-7 flex items-center justify-center border border-hairline bg-graphite hover:border-neutral-400 rounded-[1px] text-white transition-colors">
+<!-- Pause icon indicating active replay generation -->
+<svg class="w-3 h-3 fill-current" viewbox="0 0 24 24">
+<rect height="16" width="4" x="5" y="4"></rect>
+<rect height="16" width="4" x="15" y="4"></rect>
+</svg>
+</button>
+<!-- Timeline Scrubber -->
+<div class="flex-1 max-w-xl flex items-center gap-3">
+<span class="font-mono text-xs text-white">00:42</span>
+<div class="relative flex-1 h-5 flex items-center cursor-pointer group">
+<!-- Full rail track -->
+<div class="w-full h-1 bg-[#222228] relative">
+<!-- Buffered progress track -->
+<div class="absolute left-0 top-0 h-full bg-[#35353D]" style="width: 74%;"></div>
+<!-- Playhead current progress (47%) -->
+<div class="absolute left-0 top-0 h-full bg-neutral-200" style="width: 46.6%;"></div>
+<!-- Scrub handle (sharp viewfinder square) -->
+<div class="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white border border-black shadow-sm" style="left: calc(46.6% - 6px);"></div>
+</div>
+</div>
+<span class="font-mono text-xs text-text-muted">01:30</span>
+</div>
+</div>
+<!-- Right Playback Settings: Speed & Zoom -->
+<div class="flex items-center gap-6 text-xs shrink-0">
+<!-- Speed Controller -->
+<div class="flex items-center border border-hairline bg-graphite rounded-[2px] p-0.5 font-mono text-[11px]">
+<button class="px-2 py-0.5 text-text-dim hover:text-white">0.5x</button>
+<button class="px-2 py-0.5 bg-[#25252C] text-white border border-white/20 font-medium">1x</button>
+<button class="px-2 py-0.5 text-text-dim hover:text-white">2x</button>
+<button class="px-2 py-0.5 text-text-dim hover:text-white">4x</button>
+</div>
+<div class="h-4 w-px bg-hairline"></div>
+<!-- Zoom & Fit Controls -->
+<div class="flex items-center gap-1 font-mono text-xs">
+<button class="w-6 h-6 border border-hairline bg-graphite hover:border-neutral-400 text-neutral-300 flex items-center justify-center rounded-[1px]">
+              −
+            </button>
+<button class="px-2 h-6 border border-hairline bg-graphite hover:border-neutral-400 text-white flex items-center justify-center text-[11px] rounded-[1px]">
+              1:1
+            </button>
+<button class="w-6 h-6 border border-hairline bg-graphite hover:border-neutral-400 text-neutral-300 flex items-center justify-center rounded-[1px]">
+              +
+            </button>
+</div>
+</div>
+</div>
+<!-- END: ReplayToolbar -->
+</section>
+<!-- END: RightCanvasStage -->
+</main>
+<!-- END: MainBodyWorkspace -->
+<!-- BEGIN: BottomHistoryStrip -->
+<footer class="h-24 border-t border-hairline bg-surface-dim px-6 py-2 flex flex-col justify-center shrink-0 select-none z-20">
+<div class="flex items-center justify-between mb-1.5">
+<span class="text-xs text-[#7A7A80] tracking-wider font-normal">生成历史</span>
+<span class="text-[11px] font-mono text-text-dim">本地已缓存 4 项成果</span>
+</div>
+<!-- 4 Horizontal Minimal History Cards -->
+<div class="grid grid-cols-4 gap-4">
+<!-- History Card 1 -->
+<div class="flex items-center gap-3 border border-hairline bg-graphite hover:border-neutral-500 p-1.5 rounded-[2px] cursor-pointer transition-colors group">
+<div class="w-9 h-9 bg-[#18181D] border border-hairline flex items-center justify-center shrink-0 overflow-hidden">
+<svg class="w-6 h-6 stroke-neutral-400 fill-none stroke-[1.2]" viewbox="0 0 24 24">
+<path d="M3 18 L7 12 L12 16 L17 9 L21 14"></path>
+<circle cx="8" cy="7" r="1.5"></circle>
+</svg>
+</div>
+<div class="min-w-0">
+<div class="text-xs text-neutral-200 group-hover:text-white truncate font-medium">深夜街景</div>
+<div class="text-[10px] font-mono text-text-dim mt-0.5">3 天前 · 4,290 笔</div>
+</div>
+</div>
+<!-- History Card 2 -->
+<div class="flex items-center gap-3 border border-hairline bg-graphite hover:border-neutral-500 p-1.5 rounded-[2px] cursor-pointer transition-colors group">
+<div class="w-9 h-9 bg-[#18181D] border border-hairline flex items-center justify-center shrink-0 overflow-hidden">
+<svg class="w-6 h-6 stroke-neutral-400 fill-none stroke-[1.2]" viewbox="0 0 24 24">
+<circle cx="12" cy="8" r="4"></circle>
+<path d="M6 20 C6 16, 18 16, 18 20"></path>
+</svg>
+</div>
+<div class="min-w-0">
+<div class="text-xs text-neutral-200 group-hover:text-white truncate font-medium">咖啡馆人物速写</div>
+<div class="text-[10px] font-mono text-text-dim mt-0.5">上周 · 11,840 笔</div>
+</div>
+</div>
+<!-- History Card 3 -->
+<div class="flex items-center gap-3 border border-hairline bg-graphite hover:border-neutral-500 p-1.5 rounded-[2px] cursor-pointer transition-colors group">
+<div class="w-9 h-9 bg-[#18181D] border border-hairline flex items-center justify-center shrink-0 overflow-hidden">
+<svg class="w-6 h-6 stroke-neutral-400 fill-none stroke-[1.2]" viewbox="0 0 24 24">
+<path d="M12 4 L14 8 L15 15 L9 15 L10 8 Z"></path>
+<path d="M8 18 L16 18"></path>
+</svg>
+</div>
+<div class="min-w-0">
+<div class="text-xs text-neutral-200 group-hover:text-white truncate font-medium">静物花瓶</div>
+<div class="text-[10px] font-mono text-text-dim mt-0.5">2 周前 · 2,910 笔</div>
+</div>
+</div>
+<!-- History Card 4 -->
+<div class="flex items-center gap-3 border border-hairline bg-graphite hover:border-neutral-500 p-1.5 rounded-[2px] cursor-pointer transition-colors group">
+<div class="w-9 h-9 bg-[#18181D] border border-hairline flex items-center justify-center shrink-0 overflow-hidden">
+<svg class="w-6 h-6 stroke-neutral-400 fill-none stroke-[1.2]" viewbox="0 0 24 24">
+<rect height="16" width="16" x="4" y="4"></rect>
+<line x1="4" x2="20" y1="12" y2="12"></line>
+<line x1="12" x2="12" y1="4" y2="20"></line>
+</svg>
+</div>
+<div class="min-w-0">
+<div class="text-xs text-neutral-200 group-hover:text-white truncate font-medium">建筑光影</div>
+<div class="text-[10px] font-mono text-text-dim mt-0.5">1 个月前 · 8,300 笔</div>
+</div>
+</div>
+</div>
+</footer>
+<!-- END: BottomHistoryStrip -->
+</body></html>

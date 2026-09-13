@@ -1,0 +1,1620 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>图片转 SVG · 逐笔绘制回放</title>
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+  :root{
+    --bg:#07070a; --panel:#131320; --panel2:#0d0d16; --line:#282842;
+    --gold:#c9a227; --text:#e9e9f2; --dim:#71718c; --ok:#3fb950; --err:#f85149;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    /* 渐变只铺首页那一屏，用 vh 绑定视口高度。
+       原来写死 900px，在手机这种长页面上尾巴会一直扫到页脚，
+       看起来就像页脚换了一块底色。 */
+    background:radial-gradient(120vw 56vh at 50% -6%,#16162a 0%,rgba(7,7,10,0) 70%),var(--bg);
+    background-attachment:fixed,scroll;
+    color:var(--text);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;min-height:100%;
+  }
+  header{
+    padding:22px 20px 16px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(20,20,34,.9),rgba(13,13,22,.6));
+  }
+  .wrap{max-width:960px;margin:0 auto;width:100%}
+  h1{font-size:19px;font-weight:650;letter-spacing:.3px;display:flex;align-items:center;gap:10px}
+  h1 .dot{width:20px;height:20px;border-radius:6px;flex:0 0 auto;
+    background:linear-gradient(140deg,#ff9ec4,#c9a227 55%,#4fc3f7);box-shadow:0 0 14px rgba(201,162,39,.4)}
+  header p{color:var(--dim);font-size:12.5px;margin-top:7px}
+  main{flex:1 1 auto;padding:20px}
+  .grid{display:grid;gap:16px}
+  .col{display:grid;gap:16px;align-content:start;min-width:0}
+
+  /* min-width:0 必须有：卡片是 grid 子项，默认 min-width:auto 会被内部的
+     「4 列按钮组」（small 上的 nowrap）撑住，撑破列宽、压到隔壁栏上 */
+  .card{min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  /* 触屏上 hover 会「粘住」，所以下面所有 hover 只对真鼠标生效 */
+  .card h2{font-size:13px;font-weight:600;color:var(--dim);letter-spacing:.6px;
+    text-transform:uppercase;margin-bottom:12px}
+
+  /* 拖放区 */
+  #drop{
+    border:2px dashed var(--line);border-radius:12px;padding:40px 20px;text-align:center;
+    cursor:pointer;transition:border-color .15s,background .15s;background:var(--panel2)
+  }
+  #drop.over{border-color:var(--gold);background:#16162a}
+  #drop .big{font-size:15px;margin-bottom:6px}
+  #drop .sub{font-size:12px;color:var(--dim)}
+  /* 选好图之后把拖放区收成一条：大提示已经没用了，让缩略图当主角 */
+  #drop.hasfile{padding:15px 20px}
+  #drop.hasfile .big{font-size:13px;color:var(--dim);margin-bottom:0}
+  #drop.hasfile .sub,
+  #drop.hasfile .kbdhint{display:none}
+  #pick{display:none}
+  .kbdhint{display:none;margin-top:8px}
+  @media (hover:hover) and (pointer:fine){ .kbdhint{display:block} }
+  kbd{font:inherit;font-size:11px;padding:1px 5px;border:1px solid var(--line);
+    border-bottom-width:2px;border-radius:4px;background:var(--panel);color:var(--text)}
+  #thumb{max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--line);
+    margin:12px auto 0;display:none}
+
+  /* 选项 */
+  .opt{margin-bottom:14px}
+  .opt:last-child{margin-bottom:0}
+  .opt label{display:block;font-size:12.5px;color:var(--dim);margin-bottom:6px}
+  /* minmax(0,1fr)：让 4 列真的能等分收缩；写 1fr 的话列宽下限是内容最小宽度，列数一多就撑破卡片 */
+  .seg{display:grid;gap:7px;grid-template-columns:repeat(4,minmax(0,1fr))}
+  @media (max-width:760px){ .seg{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:380px){ .seg{grid-template-columns:1fr} }
+  .seg button{
+    font:inherit;font-size:13px;color:var(--text);text-align:center;
+    background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+    padding:9px 8px;cursor:pointer;transition:background .12s,border-color .12s,color .12s;
+    line-height:1.35
+  }
+  .seg button small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .seg button.on{background:var(--gold);border-color:var(--gold);color:#1a1200;font-weight:650}
+  .seg button small{display:block;font-size:10.5px;opacity:.68;font-weight:400}
+  /* 档位下方的补充说明：与上方卡片同为 12px 内边距对齐，不用负边距 */
+  .seg-hint{display:none;margin-top:9px;padding:9px 12px;font-size:12px;line-height:1.6;
+    color:#e8c97a;background:#241b0b;border:1px solid #4a3a0e;border-radius:9px;
+    border-left:3px solid var(--gold)}
+  .seg-hint.show{display:block}
+  .seg-hint.muted{color:var(--dim);background:var(--panel2);
+    border-color:var(--line);border-left-color:#3a3a5e}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .row > *{flex:1 1 200px}
+  input[type=text],input[type=number]{
+    width:100%;font:inherit;font-size:13px;color:var(--text);background:var(--panel2);
+    border:1px solid var(--line);border-radius:8px;padding:9px 12px;outline:none
+  }
+  input:focus{border-color:var(--gold)}
+
+  .btn{font:inherit;font-size:14px;font-weight:600;border-radius:9px;border:1px solid;
+    padding:12px 20px;cursor:pointer;width:100%;transition:background .12s,opacity .12s}
+  .btn.primary{background:linear-gradient(180deg,#e0b83a,var(--gold));border-color:#a98a1c;color:#1a1200}
+  .btn:disabled{opacity:.42;cursor:not-allowed}
+  .btn.ghost{background:var(--panel2);border-color:var(--line);color:var(--text);font-weight:500}
+
+  /* 进度 */
+  #progWrap{display:none}
+  .bar{height:8px;border-radius:4px;background:#1e1e34;overflow:hidden;margin:12px 0 8px}
+  .bar i{display:block;height:100%;width:0;border-radius:4px;
+    background:linear-gradient(90deg,#7a6420,var(--gold));transition:width .25s ease}
+  .bar.indet i{width:35% !important;animation:slide 1.1s ease-in-out infinite}
+  @keyframes slide{0%{margin-left:-35%}100%{margin-left:100%}}
+  #status{font-size:12.5px;color:var(--dim);min-height:20px}
+  #log{
+    margin-top:10px;max-height:190px;overflow:auto;background:#0a0a12;border:1px solid var(--line);
+    border-radius:8px;padding:10px 12px;font:11.5px/1.75 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    color:#9a9ab8;white-space:pre-wrap;word-break:break-all
+  }
+  .err{color:var(--err)}
+  .cacherow{display:flex;align-items:center;justify-content:space-between;
+    gap:10px;flex-wrap:wrap;margin-top:10px;padding-top:9px;border-top:1px solid #4a3c12}
+  #cacheInfo{font-size:12px}
+  #cacheInfo b{color:#f0d68a}
+  #clearCache{font:inherit;font-size:12px;color:#e8c97a;background:transparent;
+    border:1px solid #6b5416;border-radius:7px;padding:4px 10px;cursor:pointer}
+  #clearCache:disabled{opacity:.45;cursor:default}
+  .barinfo{font-size:11.5px;color:var(--dim);margin-top:6px}
+  .barinfo b{color:var(--gold)}
+
+  /* 结果：手机上生成前整卡不显示（否则页面底部多一块空卡片）；
+     宽屏下由下面的媒体查询放开，空的时候当右栏的引导区 */
+  #outCard{display:none}
+  #outCard.hasResult{display:flex;flex-direction:column}
+  #result{display:none}
+
+  /* 结果卡的空状态 —— 只在宽屏露脸，把右栏撑满 */
+  #emptyState{display:none;flex:1 1 auto;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:34px 24px;gap:0;
+    border:2px dashed var(--line);border-radius:12px;background:var(--panel2)}
+  /* 与页头 h1 的方标同一套渐变，中间叠一个播放三角：这是「回放」要落地的位置 */
+  .es-logo{width:60px;height:60px;border-radius:18px;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(140deg,#ff9ec4,#c9a227 55%,#4fc3f7);box-shadow:0 0 26px rgba(201,162,39,.32)}
+  .es-title{font-size:15px;font-weight:600;margin-top:16px}
+  .es-desc{font-size:12.5px;color:var(--dim);margin-top:7px;line-height:1.7;max-width:340px}
+  .es-steps{display:flex;align-items:center;justify-content:center;gap:28px;
+    margin-top:26px;flex-wrap:wrap}
+  .es-steps span{position:relative;display:flex;align-items:center;gap:7px;
+    font-size:12.5px;color:var(--dim)}
+  .es-steps b{width:21px;height:21px;border-radius:50%;background:var(--gold);color:#1a1200;
+    font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .es-steps span:not(:last-child)::after{content:"→";position:absolute;right:-20px;
+    color:#3a3a5e;font-size:12px}
+  .es-note{margin-top:18px;font-size:11.5px;color:#4a4a68}
+  .files{display:grid;gap:10px;grid-template-columns:1fr 1fr;margin-bottom:12px}
+  .file{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .file .n{font-size:12px;color:var(--dim)}
+  .file .s{font-size:17px;font-weight:650;margin:3px 0 9px}
+  .file a{display:block;text-align:center;text-decoration:none;font-size:13px;font-weight:600;
+    color:#1a1200;background:linear-gradient(180deg,#e0b83a,var(--gold));border:1px solid #a98a1c;
+    border-radius:8px;padding:9px}
+  .openbtn{
+    display:flex;align-items:center;gap:13px;text-decoration:none;
+    background:linear-gradient(135deg,#1c2b1e,#16241a);border:1px solid #2c5738;
+    border-radius:11px;padding:14px 18px;margin-bottom:12px;color:#d6f0dc;
+    transition:background .13s,border-color .13s,transform .1s
+  }
+  .openbtn:active{transform:translateY(1px)}
+  .openbtn .ar{font-size:19px;color:#5fd07a;line-height:1}
+  .openbtn b{display:block;font-size:14.5px;font-weight:650;color:#e6fbe9}
+  .openbtn small{display:block;font-size:11.5px;color:#7fa98a;margin-top:2px}
+  #frame{width:100%;height:520px;border:1px solid var(--line);border-radius:10px;background:#000}
+  .note{font-size:11.5px;color:var(--dim);margin-top:10px}
+  .warn{background:#2a1f0d;border:1px solid #6b5416;color:#e8c97a;border-radius:9px;
+    padding:10px 13px;font-size:12.5px;margin-bottom:14px}
+  /* 历史 */
+  #historyCard{display:none}
+  .hitop{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}
+  .hitop h2{margin:0}
+  .hitop .quota{font-size:11.5px;color:var(--dim)}
+  .hitop button{font:inherit;font-size:11.5px;color:var(--dim);background:none;
+    border:1px solid var(--line);border-radius:7px;padding:3px 9px;cursor:pointer}
+  .hitop button{margin-left:6px}
+  .hlist{display:grid;gap:10px}
+  .hitem{display:flex;gap:12px;align-items:center;background:var(--panel2);
+    border:1px solid var(--line);border-radius:10px;padding:10px}
+  .hitem img{width:62px;height:62px;object-fit:cover;border-radius:7px;flex:0 0 auto;
+    background:#0a0a12;border:1px solid var(--line)}
+  .hitem .meta{flex:1 1 auto;min-width:0}
+  .hitem .t{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hitem .d{font-size:11.5px;color:var(--dim);margin-top:3px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hitem .acts{display:flex;gap:6px;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end}
+  .hitem .acts button{font:inherit;font-size:12px;color:var(--text);background:var(--panel);
+    border:1px solid var(--line);border-radius:7px;padding:6px 10px;cursor:pointer;white-space:nowrap}
+  .hitem .acts button.p{background:linear-gradient(180deg,#e0b83a,var(--gold));
+    border-color:#a98a1c;color:#1a1200;font-weight:600}
+  .hitem .acts button.del{color:var(--dim)}
+  .hempty{color:var(--dim);font-size:12.5px;padding:14px 2px;text-align:center}
+  /* 结果卡的空状态：只留一行淡淡的提示，不铺底色、不画框 ——
+     之前是「灰底 + 虚线框」的横条，在页面最底部看着像多出来一条灰条 */
+  .empty{color:var(--dim);font-size:12.5px}
+  @media (max-width:640px){
+    .hitem{flex-wrap:wrap}
+    .hitem .acts{width:100%;justify-content:flex-start}
+  }
+
+  /* ============ PC / 宽屏适配 ============ */
+  @media (min-width:1060px){
+    .wrap{max-width:1240px}
+    main{padding:24px 28px}
+    /* 左栏 = 控制面板（选图 → 参数 → 生成），固定 480px；
+       右栏 = 输出（结果 → 历史），剩余宽度全给回放预览。
+       480px 是照「4 列按钮组 + 并排输入框」的最小宽度定的，改小参数卡的按钮文字会被截 */
+    .grid{grid-template-columns:480px minmax(0,1fr);gap:18px}
+    .col{gap:18px}
+    .warn{grid-column:1 / -1}
+    h1{font-size:21px}
+    header{padding:26px 28px 20px}
+    .card{padding:18px 20px;border-radius:13px}
+    input[type=text],input[type=number]{font-size:13.5px;padding:10px 13px}
+    #frame{height:min(72vh,660px)}
+    .files{grid-template-columns:1fr 1fr}
+
+    /* 右栏铺满整列高，结果卡吃掉剩余高度：
+       生成前是一块引导区，不再是「左边一大条 + 右边一小截、剩下半屏空白」 */
+    .col-right{display:flex;flex-direction:column}
+    .col-right > #outCard{display:flex;flex-direction:column;flex:1 1 auto;min-height:360px}
+    #outCard:not(.hasResult) #emptyState{display:flex}
+  }
+  @media (min-width:1500px){
+    .wrap{max-width:1420px}
+    h1{font-size:23px}
+    #frame{height:min(76vh,760px)}
+  }
+  /* 有真鼠标时才给的反馈 */
+  @media (hover:hover) and (pointer:fine){
+    #drop{cursor:pointer}
+    #drop:hover{border-color:var(--gold);background:#16162a}
+    .seg button:hover{background:#1c1c30;border-color:#3a3a5e}
+    .btn.primary:hover:not(:disabled){background:linear-gradient(180deg,#f0c94a,#d9b02e)}
+    .btn.ghost:hover{background:#1c1c30}
+    #clearCache:hover{background:#3a2c0d}
+    .file a:hover{background:linear-gradient(180deg,#f0c94a,#d9b02e)}
+    .openbtn:hover{background:linear-gradient(135deg,#22361f,#1a2c1e);border-color:#3f7a4d}
+    .hitop button:hover{color:var(--err);border-color:#5a2a2a}
+    .hitop button#hPrune:hover{color:var(--gold);border-color:#6b5416}
+    .hitem .acts button:hover{background:#1c1c30;border-color:#3a3a5e}
+    .hitem .acts button.del:hover{color:var(--err);border-color:#5a2a2a}
+    .seg button:hover{background:#1c1c30;border-color:#3a3a5e}
+    button{transition:background .12s,border-color .12s,color .12s}
+  }
+  /* 键盘焦点可见（PC 上 tab 走查） */
+  :focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:6px}
+
+  /* 页脚：不铺自己的底色，与页面同色，只用一条细线分隔 ——
+     之前给过 --panel2 的底色，反而与页面形成一块可见的色差 */
+  footer{padding:20px 20px 34px;color:var(--dim);font-size:12px;text-align:center;
+    border-top:1px solid rgba(40,40,66,.7)}
+  footer a{color:var(--gold);text-decoration:none}
+
+  /* 全屏预览层：blob 链接在「新标签页」里打不开（Android WebView / VIA 等
+     调用系统内核的浏览器会得到空白页），改成页面内全屏 iframe ——
+     同一文档访问 blob，所有浏览器都稳 */
+  #preview{position:fixed;inset:0;z-index:999;display:none;flex-direction:column;background:#060608}
+  #preview.on{display:flex}
+  /* 顶栏只放「关闭」——作品名交给回放页自己的标题栏显示，避免出现两个标题 */
+  .pv-bar{display:flex;align-items:center;justify-content:flex-end;
+    padding:7px 12px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(20,20,34,.95),rgba(13,13,22,.75))}
+  #pvClose{font:inherit;font-size:12.5px;color:#e8c97a;background:transparent;
+    border:1px solid #6b5416;border-radius:7px;padding:5px 12px;cursor:pointer;flex:0 0 auto;
+    -webkit-tap-highlight-color:transparent}
+  #pvFrame{flex:1 1 auto;width:100%;border:0;background:#000}
+  @media (max-width:1059px){
+    .grid > .col{display:contents}      /* 窄屏：左列/右列的包裹不产生额外层级，卡片直接堆叠 */
+  }
+  @media (max-width:640px){
+    .files{grid-template-columns:1fr}
+    main{padding:14px}
+    #frame{height:380px}
+    h1{font-size:16px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1><span class="dot"></span>图片转 SVG · 逐笔绘制回放</h1>
+    <p>把一张图片变成矢量 SVG + 一个能回放整个作画过程的网页。全部在你的浏览器里完成，图片不会上传到任何服务器。</p>
+  </div>
+</header>
+
+<main>
+  <div class="wrap grid">
+
+    <div class="warn" id="bootWarn" style="grid-column:1/-1">
+      ⏳ 首次使用需要下载约 21 MB 的 Python 运行时（含 OpenCV），请耐心等待一次。
+      <div class="cacherow">
+        <span id="cacheInfo">正在检查本地缓存…</span>
+        <button id="clearCache" type="button">清除运行时缓存</button>
+      </div>
+    </div>
+
+    <!-- 左列：选图 + 参数 -->
+    <div class="col">
+    <!-- 1 选图 -->
+    <div class="card">
+      <h2>1 · 选择图片</h2>
+      <div id="drop" tabindex="0" role="button" aria-label="选择图片：点击或按回车打开文件选择器，也可以直接把图片拖进来">
+        <div class="big">拖一张图片到这里，或点击选择</div>
+        <div class="sub">首选 JPG / PNG · 手机建议选「标准」档以下，超大图可能因内存不足失败</div>
+        <div class="sub kbdhint">键盘：<kbd>Enter</kbd> 选图 · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> 开始生成</div>
+      </div>
+      <input type="file" id="pick" accept="image/*">
+      <img id="thumb" alt="预览">
+    </div>
+
+    <!-- 2 选项 -->
+    <div class="card">
+      <h2>2 · 参数</h2>
+
+      <div class="opt">
+        <label>清晰度（越大越清晰，也越慢）</label>
+        <div class="seg" id="segSize">
+          <button data-w="800">快速<small>800 · 约 1 分钟</small></button>
+          <button data-w="1200" class="on">标准<small>1200 · 约 1.5 分钟</small></button>
+          <button data-w="1600">高清<small>1600 · 约 2.5 分钟</small></button>
+          <button data-w="0">最高<small>不缩放 · 最清晰</small></button>
+        </div>
+        <div class="seg-hint" id="maxHint">
+          按原始尺寸描摹：4000px 的图约 4 分钟，产物可能超过 50 MB，手机浏览器可能因内存不足失败。
+        </div>
+      </div>
+
+
+      <div class="opt">
+        <label>图片类型（影响是否先放大会降噪）</label>
+        <div class="seg" id="segType">
+          <button data-v="auto" class="on">自动<small>小图自动放大</small></button>
+          <button data-v="none">照片<small>原样描摹</small></button>
+          <button data-v="illust">插画<small>放大 + 降噪</small></button>
+        </div>
+        <div class="seg-hint show muted">
+          小图会被自动放大 2 倍再描摹（轮廓更顺、色块更干净）。
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="opt">
+          <label>标题（显示在回放页顶部）</label>
+          <input type="text" id="title" placeholder="我的作品" maxlength="60">
+        </div>
+        <div class="opt">
+          <label>回放时长（秒，1× 速度）</label>
+          <input type="number" id="duration" value="90" min="10" max="600" step="10">
+        </div>
+      </div>
+    </div>
+
+    <!-- 3 生成 -->
+    <div class="card">
+      <h2>3 · 生成</h2>
+      <button class="btn primary" id="go" disabled>开始生成</button>
+
+      <div id="progWrap">
+        <div class="bar" id="bar"><i id="barFill"></i></div>
+        <div id="status">准备中…</div>
+        <div class="barinfo" id="netInfo"></div>
+        <div id="log"></div>
+      </div>
+
+    </div><!-- /生成卡 -->
+
+    </div><!-- /左列 -->
+
+    <!-- 右列：结果 + 历史 -->
+    <div class="col col-right">
+
+    <!-- 4 结果（手机上生成前不显示，避免底部多出一块空卡片；宽屏下始终显示，
+         没结果的时候当右栏的引导区，把整栏填满） -->
+    <div class="card" id="outCard">
+      <h2>4 · 结果</h2>
+
+      <div id="emptyState">
+        <div class="es-logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="26" height="26"><path
+            d="M9.5 7.2v9.6a.8.8 0 0 0 1.22.68l7.6-4.8a.8.8 0 0 0 0-1.36l-7.6-4.8A.8.8 0 0 0 9.5 7.2Z"
+            fill="#1a1200"/></svg>
+        </div>
+        <div class="es-title">生成的作品会出现在这里</div>
+        <div class="es-desc">逐笔回放预览、SVG 与 HTML 的下载入口，都在这栏。</div>
+        <div class="es-steps">
+          <span><b>1</b>选图</span>
+          <span><b>2</b>调参数</span>
+          <span><b>3</b>开始生成</span>
+        </div>
+        <div class="es-note">生成大约需要 1～3 分钟 · 进度显示在左侧「3 · 生成」栏</div>
+      </div>
+
+      <div id="result">
+        <a id="openHtml" class="openbtn" target="_blank" rel="noopener">
+          <span class="ar">▶</span>
+          <span><b>全屏预览回放页</b><small>全屏播放绘制过程（下载后可以发给别人）</small></span>
+        </a>
+
+        <div class="files">
+          <div class="file">
+            <div class="n">SVG 矢量图</div>
+            <div class="s" id="szSvg">—</div>
+            <a id="dlSvg" download>⬇ 下载 .svg</a>
+          </div>
+          <div class="file">
+            <div class="n">回放网页</div>
+            <div class="s" id="szHtml">—</div>
+            <a id="dlHtml" download>⬇ 下载 .html</a>
+          </div>
+        </div>
+        <div class="note" id="doneNote"></div>
+        <div class="note">↓ 也可以就在下面直接播放</div>
+        <iframe id="frame" title="回放预览"></iframe>
+      </div>
+    </div><!-- /outCard -->
+
+    <!-- 4 历史 -->
+    <div class="card" id="historyCard">
+      <div class="hitop">
+        <h2>5 · 生成历史</h2>
+        <div>
+          <span class="quota" id="hQuota"></span>
+          <button id="hPrune" title="按体积上限清理最旧的记录">清理空间</button>
+          <button id="hClear">全部清空</button>
+        </div>
+      </div>
+      <div class="hlist" id="hList"></div>
+    </div>
+
+    </div><!-- /右列 -->
+  </div>
+</main>
+
+<!-- 全屏预览层：blob 链接在「新标签页」里打不开（Android WebView / VIA 等
+     调用系统内核的浏览器会得到空白页），这里改成页面内全屏 iframe ——
+     同一文档访问 blob，所有浏览器都稳，桌面端也少开一个标签页 -->
+<div id="preview">
+  <div class="pv-bar">
+    <button id="pvClose" type="button">✕ 关闭</button>
+  </div>
+  <iframe id="pvFrame" title="回放预览"></iframe>
+</div>
+
+<footer>
+  <div class="wrap">
+    基于 <a href="https://github.com/VanemKrAu/photo-to-svg" target="_blank" rel="noopener">photo-to-svg</a> ·
+    算法来自 <a href="https://github.com/AvroraCL/image-to-css-art" target="_blank" rel="noopener">AvroraCL/image-to-css-art</a>（MIT）·
+    浏览器端由 Pyodide 驱动
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  const $ = (id) => document.getElementById(id);
+  const drop = $('drop'), pick = $('pick'), thumb = $('thumb'), go = $('go');
+  const bar = $('bar'), barFill = $('barFill'), status = $('status'), logEl = $('log');
+
+  let file = null, worker = null, ready = false, busy = false;
+  let lastHtmlText = '';   // 最近一次生成的回放页源码（预览用 srcdoc，见 openPreview）
+
+  /* ---------- 选项 ---------- */
+  function seg(id, cb){
+    const box = $(id);
+    box.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if(!b) return;
+      box.querySelectorAll('button').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      cb(b.dataset.w ?? b.dataset.v);
+    });
+  }
+  /* 初值必须和界面上默认选中的按钮一致（「标准」= 1200）——
+     之前写的是 800，用户看着「标准」已选中、实际却按 800px 跑，
+     出图细节少还没线索（画布尺寸才看得出来） */
+  let maxWidth = '1200', preprocess = 'auto';
+  seg('segSize', v => {
+    maxWidth = v;
+    // 「最高」档才会慢/大，把提示显出来
+    $('maxHint').classList.toggle('show', v === '0');
+  });
+  seg('segType', v => { preprocess = v; });
+
+  /* ---------- 选图 ---------- */
+  function show(f){
+    if(!f || !/^image\//.test(f.type)){ alert('请选一张图片文件'); return; }
+    file = f;
+    thumb.src = URL.createObjectURL(f);
+    thumb.style.display = 'block';
+    drop.classList.add('hasfile');                 // 收成一条，只留「更换图片」
+    drop.querySelector('.big').textContent = '点击或拖入可更换图片';
+    go.disabled = !ready;
+    $('result').style.display = 'none';
+    $('outCard').classList.remove('hasResult');   // 换了图，先回到空状态
+    $('progWrap').style.display = 'none';
+    if(!$('title').value){
+      $('title').value = f.name.replace(/\.[^.]+$/, '').slice(0, 40);
+    }
+  }
+  drop.addEventListener('click', () => pick.click());
+  drop.addEventListener('keydown', (e) => {
+    if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); pick.click(); }
+  });
+  // Ctrl/Cmd + Enter：直接开始生成（PC 上比去点按钮顺手）
+  window.addEventListener('keydown', (e) => {
+    if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){
+      e.preventDefault();
+      if(!go.disabled) go.click();
+    }
+  });
+  pick.addEventListener('change', () => show(pick.files[0]));
+  ['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => {
+    e.preventDefault(); drop.classList.add('over');
+  }));
+  ['dragleave','drop'].forEach(t => drop.addEventListener(t, e => {
+    e.preventDefault(); drop.classList.remove('over');
+  }));
+  drop.addEventListener('drop', e => {
+    const f = e.dataTransfer.files[0];
+    show(f);
+  });
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => e.preventDefault());
+
+  /* ---------- 日志 ---------- */
+  function say(text, cls){
+    const line = document.createElement('div');
+    if(cls) line.className = cls;
+    line.textContent = text;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  /* ---------- 全屏预览层 ----------
+   * 为什么不用「新标签页」：blob URL 只在创建它的文档里有效 ——
+   * Android WebView（VIA 等调用系统内核的浏览器）打开新标签页会得到
+   * 空白页（Chrome 自带完整内核所以没事）。页面内 iframe 属于同一文档，
+   * blob 一定有效；桌面端也顺便少开一个标签页。 */
+  function openPreview(htmlText){
+    /* 不在这里显示作品名 —— 回放页自带标题栏，重复会显得乱 */
+    /* 用 srcdoc 注入、而不是 blob URL：Android WebView（VIA 等调用系统内核的
+       浏览器）默认拦掉 blob: 协议 —— 新标签页和 iframe 都会得到空白页；
+       srcdoc 是纯 DOM 注入、不经过 URL 加载，所有浏览器都认。 */
+    $('pvFrame').removeAttribute('src');
+    $('pvFrame').srcdoc = htmlText;
+    $('preview').classList.add('on');
+  }
+  function closePreview(){
+    if(!$('preview').classList.contains('on')) return;
+    $('preview').classList.remove('on');
+    $('pvFrame').removeAttribute('srcdoc');   // 丢弃内容，释放内存
+    $('pvFrame').src = 'about:blank';
+  }
+  $('pvClose').addEventListener('click', closePreview);
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') closePreview();
+  });
+  /* 结果卡的「预览」：拦掉默认的新标签页行为，改走页面内全屏（srcdoc） */
+  $('openHtml').addEventListener('click', function(e){
+    e.preventDefault();
+    openPreview(lastHtmlText);
+  });
+
+  /* 预览框里的「全屏」请求（回放页 postMessage 上来的）：
+     结果卡里点 → 打开铺满整屏的预览层；预览层里再点 → 收回。
+     （回放页自己的伪全屏出不了 iframe，铺不满屏幕） */
+  window.addEventListener("message", function(e){
+    if(!e.data || e.data.type !== "art:fullscreen") return;
+    if($('preview').classList.contains('on')){
+      if(e.source === $('pvFrame').contentWindow) closePreview();
+    }else if(e.source === $('frame').contentWindow){
+      openPreview(lastHtmlText);
+    }
+  });
+
+  /* ---------- 历史（IndexedDB） ----------
+   * 用 IndexedDB 而不是 localStorage：单条记录就有 5~30 MB，
+   * localStorage 只有 5 MB 上限，塞不下。
+   */
+  const DB_NAME = 'photo-to-svg', DB_VER = 1, STORE = 'records';
+  const MAX_ITEMS = 12, MAX_BYTES = 260 * 1024 * 1024;   // 条数与总体积双上限
+  let db = null;
+
+  function openDB(){
+    return new Promise((res, rej) => {
+      const req = indexedDB.open(DB_NAME, DB_VER);
+      req.onupgradeneeded = () => {
+        const d = req.result;
+        if(!d.objectStoreNames.contains(STORE)){
+          const s = d.createObjectStore(STORE, { keyPath: 'id' });
+          s.createIndex('at', 'at');
+        }
+      };
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error);
+    });
+  }
+  const tx = (mode) => db.transaction(STORE, mode).objectStore(STORE);
+  const wrap = (r) => new Promise((res, rej) => {
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+
+  async function dbAll(){
+    const list = await wrap(tx('readonly').getAll());
+    return list.sort((a, b) => b.at - a.at);
+  }
+  async function dbPut(rec){ await wrap(tx('readwrite').put(rec)); }
+  async function dbDel(id){ await wrap(tx('readwrite').delete(id)); }
+
+  /* 超出上限就从最旧的开始删 */
+  async function prune(){
+    let list = await dbAll();
+    let bytes = list.reduce((n, r) => n + (r.size || 0), 0);
+    while(list.length > MAX_ITEMS || (bytes > MAX_BYTES && list.length > 1)){
+      const last = list.pop();
+      bytes -= last.size || 0;
+      await dbDel(last.id);
+    }
+    return list;
+  }
+
+  function fmtSize(n){
+    if(n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+    if(n >= 1024) return (n / 1024).toFixed(0) + ' KB';
+    return n + ' B';
+  }
+  function fmtTime(ms){
+    const d = new Date(ms), now = Date.now();
+    const p = (x) => String(x).padStart(2, '0');
+    const hm = p(d.getHours()) + ':' + p(d.getMinutes());
+    if(now - ms < 86400000) return '今天 ' + hm;
+    if(now - ms < 172800000) return '昨天 ' + hm;
+    return (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + hm;
+  }
+
+  /* 生成缩略图：把用户选的图直接画小，不用等 SVG 出来 */
+  function thumbOf(file){
+    return new Promise((res) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const N = 128;
+        const s = Math.min(N / img.width, N / img.height, 1);
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * s));
+        c.height = Math.max(1, Math.round(img.height * s));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        try{ res(c.toDataURL('image/jpeg', 0.72)); }catch(_){ res(''); }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); res(''); };
+      img.src = url;
+    });
+  }
+
+  const urlCache = new Map();   // id -> {svg, html} 的对象 URL，避免重复创建
+  function urlsOf(rec){
+    let u = urlCache.get(rec.id);
+    if(!u){ u = { svg: URL.createObjectURL(rec.svg), html: null }; urlCache.set(rec.id, u); }
+    return u;
+  }
+
+  /* ---------- 历史记录里的「旧版回放页」升级 ----------
+   * 早期生成的页面把线稿反解成固定 15% 的播出时间（起稿要磨十几秒）；
+   * 新默认按「√bbox面积 ≈ 线长」自然播（3 秒出头）。
+   * 历史里存的 HTML 是生成那一刻的成品，这里在打开/下载时把时间轴换成新逻辑，
+   * 只改内存里的副本，不动 IndexedDB 里存的原件。
+   * 注意：AXIS_NEW 要和 tools/svg2canvas.py 模板里那段保持同步。 */
+  const AXIS_OLD =
+    "  for(i=NL;i<N;i++){ w=0.15+AREA[i]*0.002; W[i]=w; sumW+=w; }\n" +
+    "  var LW = SKETCH_T>0 ? (SKETCH_T*sumW)/((1-SKETCH_T)*NL) : 0.15;\n" +
+    "  for(i=0;i<NL;i++) W[i]=LW;";
+  const AXIS_NEW =
+    "  if(SKETCH_T>0){\n" +
+    "    /* 指定了起稿时长：色块先按视觉重量算好，线稿反解成固定占比 */\n" +
+    "    for(i=NL;i<N;i++){ w=0.15+AREA[i]*0.002; W[i]=w; sumW+=w; }\n" +
+    "    var LW=(SKETCH_T*sumW)/((1-SKETCH_T)*NL);\n" +
+    "    for(i=0;i<NL;i++) W[i]=LW;\n" +
+    "  }else{\n" +
+    "    /* 默认：线稿不单独占时间，但用「线的长度」而不是「bbox 面积」来估它的视觉重量——\n" +
+    "       线是细长的，bbox 会把整条线的跨度都圈进去、明显超重（实测能把起稿拖到 13 秒）。\n" +
+    "       √bbox面积 ≈ 线的特征长度，和色块那边的「面积」在几何上对齐。 */\n" +
+    "    for(i=0;i<NL;i++) W[i]=0.15+Math.sqrt(AREA[i])*0.05;\n" +
+    "    for(i=NL;i<N;i++) W[i]=0.15+AREA[i]*0.002;\n" +
+    "  }";
+
+  /* ---------- 历史里的旧回放页：布局升级（2026-09「相册式」缩放） ----------
+     旧版把视口做成了贴着图片的小框（放大只能在框里裁剪、缩放条压住画面）。
+     这套规则把它换成新布局。规则来自 0f648ca 前后的模板对比，
+     含作品参数的几处（canvas 尺寸、W/H）用正则。
+
+     **逐条独立应用，不再是「全中才生效」**（2026-09-15 修）：规则是按世代累积的
+     —— 第 0 条针对最早那批页面、最后几条针对最新那批 —— 而用户的历史记录横跨
+     好几个世代。原先要求全部命中、任何一处对不上就整体放弃，等于「只要不是从
+     最老版本一路升上来的页面，就一条都别想升」：实测 0a7cbbc / 83dbe13 / ea3acd6
+     三个世代的产物**全部卡在第 0 条**（它们早就没有「首帧兜底尺寸」那段注释了），
+     于是 #sideView、指针捕获、双栏隐藏对照层这些修复一条都没轮到，
+     历史预览里的老毛病原样存在（用户报「修完了网站上还是有问题」就是这个）。
+     现在每条规则自己判定：命中就替换、命中不了就跳过（顺序仍然保留 —— 后面的
+     规则依赖前面的输出）。每条规则的 from/re 都覆盖一整段完整代码块，
+     所以「只中一半」不会把页面改坏。 */
+  const LAYOUT_RULES = [
+    { re: /  \/\* 首帧兜底尺寸[\s\S]{0,400}?touch-action:none\}/,
+      to: `  /* .frame 是「视口」：撑满整个可用区域，图片按适配尺寸居中显示。
+     不要给它 aspect-ratio —— 那样它会缩成「贴着图片的小框」，
+     放大后只能在小框里裁剪，用不上整屏（手机全屏时尤其明显）。
+     放大时图片在视口里平移，超出部分正好被这里的 overflow 裁掉。 */
+  .frame{position:relative;flex:1 1 auto;min-width:0;align-self:stretch;overflow:hidden;touch-action:none}
+  /* 跟随缩放/平移的「画面」容器：canvas 和对照层都放里面，一次 transform 全部同步 */
+  .view{position:absolute;left:0;top:0;will-change:transform}` },
+    { from: `  .stage{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;
+    padding:8px;gap:14px}`,
+      to: `  .stage{position:relative;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;
+    padding:8px;gap:14px}` },
+    { from: `  /* 缩放控件：浮在画框右下角 */
+  .zoombar{position:absolute;right:10px;bottom:10px;display:flex;gap:3px;z-index:5;
+    background:rgba(10,10,16,.74);border:1px solid var(--line);border-radius:9px;
+    padding:4px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}`,
+      to: `  /* 缩放控件：毛玻璃浮框，钉在「界面」右下角（画面区底部，紧挨底部工具栏上方）。
+     定位基准是 .stage（整个观感区域）而不是 .frame（画面）——
+     相对画面定位时它会跟着图走，图小的时候正好压在图上。 */
+  .zoombar{position:absolute;right:10px;bottom:10px;z-index:10;
+    display:flex;gap:3px;align-items:center;
+    background:rgba(10,10,16,.74);border:1px solid var(--line);border-radius:9px;
+    padding:4px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}` },
+    { re: /(    )<canvas id="art" width="(\d+)" height="(\d+)"><\/canvas>\n(    )<div id="ghost"><\/div>\n(    )<div id="split"><\/div>/,
+      to: `$1<div class="view" id="view">\n$1  <canvas id="art" width="$2" height="$3"></canvas>\n$1  <div id="ghost"></div>\n$1  <div id="split"></div>` },
+    { from: `    <div id="split"></div>\n    <div id="toast">`,
+      to: `    <div id="split"></div>\n    </div>\n    <div id="toast">` },
+    { from: `    <div class="zoombar" id="zoombar">
+      <button id="zOut" title="缩小（滚轮 / 双指捏合）">−</button>
+      <span class="lvl" id="zLvl">100%</span>
+      <button id="zIn" title="放大（滚轮 / 双指捏合）">＋</button>
+      <button id="zFit" title="适应窗口（按 0）">⤢</button>
+      <button id="zRst" title="实际大小（按 1）">1:1</button>
+    </div>
+  </div>
+  <div id="side"><div class="tag">原图</div></div>
+</div>
+
+<footer>
+  <div class="row">
+    <div class="bar" id="bar">
+      <div class="track"></div><div class="fill" id="fill"></div><div class="knob" id="knob"></div>
+    </div>
+    <span class="meta" id="pct">0%</span>
+  </div>`,
+      to: `  </div>
+  <div id="side"><div class="tag">原图</div></div>
+  <div class="zoombar" id="zoombar">
+    <button id="zOut" title="缩小（滚轮 / 双指捏合）">−</button>
+    <span class="lvl" id="zLvl">100%</span>
+    <button id="zIn" title="放大（滚轮 / 双指捏合）">＋</button>
+    <button id="zFit" title="适应窗口（按 0）">⤢</button>
+    <button id="zRst" title="实际大小（按 1）">1:1</button>
+  </div>
+</div>
+
+<footer>
+  <div class="row">
+    <div class="bar" id="bar">
+      <div class="track"></div><div class="fill" id="fill"></div><div class="knob" id="knob"></div>
+    </div>
+    <span class="meta" id="pct">0%</span>
+  </div>` },
+    { re: /(var CV=document\.getElementById\("art"\), W=\d+, H=\d+;\n)/,
+      to: `$1var fitW=0, fitH=0;                     /* 图片的「适配尺寸」：显示在视口中央的基准大小 */\n` },
+    { from: `var frame=document.getElementById("frame");\nfunction setSplit(clientX){\n  var r=frame.getBoundingClientRect();`,
+      to: `var frame=document.getElementById("frame"), VIEW=document.getElementById("view");\nfunction setSplit(clientX){\n  var r=VIEW.getBoundingClientRect();          /* 分界按「画面」（不是视口）的比例算 */` },
+    { from: `document.getElementById("full").addEventListener("click",toggleFull);\nframe.addEventListener("dblclick",toggleFull);`,
+      to: `document.getElementById("full").addEventListener("click",toggleFull);\n/* 双击留给「放大/还原」（绑在 frame 上，黑边区域双击也有效）；全屏只用按钮或 F 键 */` },
+    { from: `  else if(e.key==="1"){ e.preventDefault(); pause(); setZoom(1/fitScale); }\n  else if(e.key==="+"||e.key==="="){ e.preventDefault(); pause(); setZoom(zoom.s*1.4); }\n  else if(e.key==="-"||e.key==="_"){ e.preventDefault(); pause(); setZoom(zoom.s/1.4); }`,
+      to: `  else if(e.key==="1"){ e.preventDefault(); pause(); setZoomAt(1/fitScale); }\n  else if(e.key==="+"||e.key==="="){ e.preventDefault(); pause(); setZoomAt(zoom.s*1.4); }\n  else if(e.key==="-"||e.key==="_"){ e.preventDefault(); pause(); setZoomAt(zoom.s/1.4); }` },
+    { from: `  var dual=sideMode(), GAP=14;
+  if(dual){
+    sideEl.style.display="block";
+    var cell=(aw-GAP)/2;
+    var s=Math.min(cell/W, ah/H);
+    var w=Math.max(1,Math.floor(W*s)), h=Math.max(1,Math.floor(H*s));
+    frame.style.width=w+"px";  frame.style.height=h+"px";
+    sideEl.style.width=w+"px"; sideEl.style.height=h+"px";
+    fitScale = w / W;                       /* 1:1 按钮与快捷键要用它换算 */
+    if(zoom.s <= 1.0001) applyView();
+  }else{
+    sideEl.style.display="none";
+    var s2=Math.min(aw/W, ah/H);
+    frame.style.width =Math.max(1,Math.floor(W*s2))+"px";
+    frame.style.height=Math.max(1,Math.floor(H*s2))+"px";
+    fitScale = s2;
+    if(zoom.s <= 1.0001) applyView();
+  }`,
+      to: `  var dual=sideMode(), GAP=14, vw;
+  if(dual){
+    sideEl.style.display="block";
+    vw=(aw-GAP)/2;                          /* 左栏（视口）可用宽度 */
+    /* 双栏模式：右栏已是完整原图，左栏别再叠「半张原图 + 分界线」 */
+    ghostEl.style.display="none";
+    splitEl.style.display="none";
+  }else{
+    sideEl.style.display="none";
+    vw=aw;
+    /* 单栏：恢复对照层（开着的话）*/
+    ghostEl.style.display=ghostOn?"block":"none";
+    splitEl.style.display=ghostOn?"block":"none";
+  }
+  /* 视口尺寸由 CSS 撑满，这里只算「图片的适配尺寸」并把它居中 */
+  var s=Math.min(vw/W, ah/H);
+  fitScale=s;                               /* 1:1 按钮与快捷键要用它换算 */
+  fitW=Math.max(1,Math.round(W*s)); fitH=Math.max(1,Math.round(H*s));
+  VIEW.style.width =fitW+"px";
+  VIEW.style.height=fitH+"px";
+  if(dual){ sideEl.style.width=fitW+"px"; sideEl.style.height=fitH+"px"; }
+  clampPan();
+  applyView();` },
+    /* 「相册式布局已就位、但还早于双栏隐藏对照层那一版（0bcafd4）」的页面 ——
+       这正是用户历史记录里最常见的一批（0a7cbbc / 83dbe13 / ea3acd6 都属此列）。
+       上面那条规则只在**老布局**（var cell=(aw-GAP)/2）上生效，这批页面匹配不到，
+       于是它们永远拿不到「双栏别再叠半张原图 + 分界线」这个修复 ——
+       这也是用户说「修完了网站上还是有问题」的来源之一。这条专门补它。 */
+    { from: `  var dual=sideMode(), GAP=14, vw;
+  if(dual){
+    sideEl.style.display="block";
+    vw=(aw-GAP)/2;                          /* 左栏（视口）可用宽度 */
+  }else{
+    sideEl.style.display="none";
+    vw=aw;
+  }`,
+      to: `  var dual=sideMode(), GAP=14, vw;
+  if(dual){
+    sideEl.style.display="block";
+    vw=(aw-GAP)/2;                          /* 左栏（视口）可用宽度 */
+    /* 双栏模式：右栏已是完整原图，左栏别再叠「半张原图 + 分界线」 */
+    ghostEl.style.display="none";
+    splitEl.style.display="none";
+  }else{
+    sideEl.style.display="none";
+    vw=aw;
+    /* 单栏：恢复对照层（开着的话）*/
+    ghostEl.style.display=ghostOn?"block":"none";
+    splitEl.style.display=ghostOn?"block":"none";
+  }` },
+    { from: `  CV.style.transformOrigin = "0 0";
+  CV.style.transform = "translate(" + zoom.tx + "px," + zoom.ty + "px) scale(" + zoom.s + ")";`,
+      to: `  var fw=frame.clientWidth, fh=frame.clientHeight;
+  /* 图片视觉左上角 = 「居中基准」+ 用户平移（tx/ty 是相对居中位置的偏移） */
+  var bx=(fw-fitW*zoom.s)/2+zoom.tx, by=(fh-fitH*zoom.s)/2+zoom.ty;
+  VIEW.style.transformOrigin = "0 0";
+  VIEW.style.transform = "translate(" + bx + "px," + by + "px) scale(" + zoom.s + ")";` },
+    { from: `function clampPan(){
+  var maxX = Math.max(0, W * zoom.s - W), maxY = Math.max(0, H * zoom.s - H);
+  zoom.tx = Math.min(0, Math.max(-maxX, zoom.tx));
+  zoom.ty = Math.min(0, Math.max(-maxY, zoom.ty));
+}
+/* 以 (ax, ay) 为锚点缩放 —— 锚点是「相对画布左上角」的屏幕坐标。
+   推导：画布点 a 的屏幕位置 = tx + a*s；要让它缩放后位置不变，
+   则 tx' = p - (p - tx) * (s'/s)。 */
+function setZoom(ns, ax, ay){
+  ns = Math.min(24, Math.max(1, ns));
+  if(ax === undefined){ ax = W * zoom.s / 2; ay = H * zoom.s / 2; }
+  var k = ns / zoom.s;
+  zoom.tx = ax - (ax - zoom.tx) * k;
+  zoom.ty = ay - (ay - zoom.ty) * k;
+  zoom.s = ns;
+  clampPan();
+  applyView();
+}`,
+      to: `/* 平移范围：图片比视口大时不许把边缘拖进视口；没占满的方向锁在居中 */
+function clampPan(){
+  var fw=frame.clientWidth, fh=frame.clientHeight;
+  var vw=fitW*zoom.s, vh=fitH*zoom.s;
+  var mx=Math.max(0,(vw-fw)/2), my=Math.max(0,(vh-fh)/2);
+  zoom.tx = Math.max(-mx, Math.min(mx, zoom.tx));
+  zoom.ty = Math.max(-my, Math.min(my, zoom.ty));
+}
+/* 以视口内的点 (cx, cy) 为锚点缩放（不传就锚定视口中心）——
+   缩放后该点对应的屏幕位置保持不变，和相册/地图的手感一致。 */
+function setZoomAt(ns, cx, cy){
+  ns = Math.min(24, Math.max(1, ns));
+  var fw=frame.clientWidth, fh=frame.clientHeight;
+  var k = ns / zoom.s;
+  var L = (fw-fitW*zoom.s)/2+zoom.tx, T = (fh-fitH*zoom.s)/2+zoom.ty;   /* 图片视觉左上角 */
+  if(cx === undefined){ cx = fw/2; cy = fh/2; }
+  var a = cx - L, b = cy - T;                    /* 锚点相对图片左上角 */
+  zoom.s = ns;
+  zoom.tx = cx - a*k - (fw-fitW*ns)/2;
+  zoom.ty = cy - b*k - (fh-fitH*ns)/2;
+  clampPan();
+  applyView();
+}` },
+    { from: `  var r = CV.getBoundingClientRect();\n  setZoom(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX - r.left, e.clientY - r.top);`,
+      to: `  var r = frame.getBoundingClientRect();\n  setZoomAt(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX - r.left, e.clientY - r.top);` },
+    { from: `    var a = ptrs[ids[0]], b = ptrs[ids[1]];
+    pinch = { d: Math.hypot(a.x-b.x, a.y-b.y), s: zoom.s,
+              cx:(a.x+b.x)/2, cy:(a.y+b.y)/2 };`,
+      to: `    var a = ptrs[ids[0]], b = ptrs[ids[1]];
+    var r = frame.getBoundingClientRect();
+    pinch = { d: Math.hypot(a.x-b.x, a.y-b.y), s: zoom.s,
+              cx:(a.x+b.x)/2 - r.left, cy:(a.y+b.y)/2 - r.top };` },
+    { from: `    if(d > 0) setZoom(pinch.s * (d / pinch.d), pinch.cx, pinch.cy);`,
+      to: `    if(d > 0) setZoomAt(pinch.s * (d / pinch.d), pinch.cx, pinch.cy);` },
+    { from: `/* 双击画面：1× ⇄ 2.5× 切换（全屏改用按钮或 F 键） */
+CV.addEventListener("dblclick", function(e){
+  var r = CV.getBoundingClientRect();
+  if(zoom.s > 1.01) resetView();
+  else setZoom(2.5, e.clientX - r.left, e.clientY - r.top);
+});`,
+      to: `/* 双击画面：1× ⇄ 2.5× 切换（绑在视口上，黑边区域双击也有效） */
+frame.addEventListener("dblclick", function(e){
+  var r = frame.getBoundingClientRect();
+  if(zoom.s > 1.01) resetView();
+  else setZoomAt(2.5, e.clientX - r.left, e.clientY - r.top);
+});` },
+    { from: `document.getElementById("zIn").onclick  = function(){ pause(); setZoom(zoom.s * 1.4); };\ndocument.getElementById("zOut").onclick = function(){ pause(); setZoom(zoom.s / 1.4); };`,
+      to: `document.getElementById("zIn").onclick  = function(){ pause(); setZoomAt(zoom.s * 1.4); };\ndocument.getElementById("zOut").onclick = function(){ pause(); setZoomAt(zoom.s / 1.4); };` },
+    { from: `document.getElementById("zRst").onclick = function(){ pause(); setZoom(1 / fitScale); };`,
+      to: `document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fitScale); };` },
+    /* 色块补同色描边（2026-09-14）：不补的话色块间的发丝缝会露出底板，
+       深色图上就是密集的黑线/黑斑（用户报「脸上有黑色斑纹」） */
+    { from: `    ctx.fill("evenodd");
+  }
+}`,
+      to: `    ctx.fill("evenodd");
+    /* 补一层同色描边：色块之间会有发丝缝，不补的话缝里露出底板 ——
+       深色图上就是密集的黑线/黑斑（脸这种细节密集处最明显）。 */
+    ctx.strokeStyle=ctx.fillStyle;
+    ctx.lineWidth=0.7; ctx.lineJoin="round";
+    ctx.stroke();
+  }
+}` },
+    /* 右栏原图改用可变换层 #sideView（2026-09-14）：可滚轮缩放、与左栏同步；
+       顺带修「拖出画面松手后画面粘住」与「分界线跟着鼠标跑」 */
+    { from: `  #side{display:none;position:relative;flex:0 0 auto;
+    box-shadow:0 10px 40px rgba(0,0,0,.8),0 0 0 1px var(--line);border-radius:5px;overflow:hidden;
+    background-image:var(--ghostimg);background-size:100% 100%;background-repeat:no-repeat}`,
+      to: `  #side{display:none;position:relative;flex:0 0 auto;
+    box-shadow:0 10px 40px rgba(0,0,0,.8),0 0 0 1px var(--line);border-radius:5px;overflow:hidden}
+  #sideView{position:absolute;left:0;top:0;will-change:transform;
+    background-image:var(--ghostimg);background-size:100% 100%;background-repeat:no-repeat}` },
+    { from: `  <div id="side"><div class="tag">原图</div></div>`,
+      to: `  <div id="side"><div id="sideView"></div><div class="tag">原图</div></div>` },
+    { from: `var frame=document.getElementById("frame"), VIEW=document.getElementById("view");`,
+      to: `var frame=document.getElementById("frame"), VIEW=document.getElementById("view"),
+    SIDEVIEW=document.getElementById("sideView");` },
+    { from: `  if(dual){ sideEl.style.width=fitW+"px"; sideEl.style.height=fitH+"px"; }
+  clampPan();`,
+      to: `  if(dual){
+    sideEl.style.width=fitW+"px"; sideEl.style.height=fitH+"px";
+    SIDEVIEW.style.width=fitW+"px"; SIDEVIEW.style.height=fitH+"px";
+  }
+  clampPan();` },
+    { from: `  VIEW.style.transform = "translate(" + bx + "px," + by + "px) scale(" + zoom.s + ")";
+  var zl = document.getElementById("zLvl");`,
+      to: `  VIEW.style.transform = "translate(" + bx + "px," + by + "px) scale(" + zoom.s + ")";
+  if(SIDEVIEW){
+    SIDEVIEW.style.transformOrigin = "0 0";
+    SIDEVIEW.style.transform = "translate(" + zoom.tx + "px," + zoom.ty + "px) scale(" + zoom.s + ")";
+  }
+  var zl = document.getElementById("zLvl");` },
+    { from: `frame.addEventListener("pointerdown", function(e){
+  ptrs[e.pointerId] = { x:e.clientX, y:e.clientY };
+  var ids = Object.keys(ptrs);`,
+      to: `frame.addEventListener("pointerdown", function(e){
+  ptrs[e.pointerId] = { x:e.clientX, y:e.clientY };
+  try{ frame.setPointerCapture(e.pointerId); }catch(_){}
+  var ids = Object.keys(ptrs);` },
+    { from: `frame.addEventListener("pointermove",function(e){
+  if(!ghostOn) return;
+  if(e.pointerType==="mouse" || e.buttons) setSplit(e.clientX);
+});`,
+      to: `frame.addEventListener("pointermove",function(e){
+  if(!ghostOn) return;
+  if(e.buttons) setSplit(e.clientX);   /* 只在按住拖动时移动分界线 */
+});` },
+    /* 这条的 from 只是「左栏 wheel 那三行」，它要补的是右栏滚轮监听；
+       而右栏滚轮在共享版/独立版里写法完全不同，靠 to 的新增块认不出「已经补过」——
+       独立版页面会被它再插一段共享版监听（下面那条再改回独立版，看着结果对、
+       其实每跑一次都改写一次，幂等就废了）。所以显式指一个**两版都有**的哨兵。 */
+    { sentinel: 'sideEl.addEventListener("wheel", function(e){',
+      from: `  var r = frame.getBoundingClientRect();
+  setZoomAt(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX - r.left, e.clientY - r.top);
+}, { passive:false });`,
+      to: `  var r = frame.getBoundingClientRect();
+  setZoomAt(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX - r.left, e.clientY - r.top);
+}, { passive:false });
+/* 右栏（原图）也能滚轮缩放：与左栏共享同一套缩放/平移状态 */
+sideEl.addEventListener("wheel", function(e){
+  e.preventDefault();
+  pause();
+  var sr = SIDEVIEW.getBoundingClientRect();
+  var ax = (e.clientX - sr.left) + (frame.clientWidth  - fitW*zoom.s)/2;
+  var ay = (e.clientY - sr.top ) + (frame.clientHeight - fitH*zoom.s)/2;
+  setZoomAt(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), ax, ay);
+}, { passive:false });` },
+
+    /* 全屏改「CSS 伪全屏」（2026-09-14）：Android WebView（VIA 等）会把
+       requestFullscreen 当「视频全屏」并强制横屏，竖图也被转；CSS 方案绕开它 */
+    { from: `  footer{flex:0 0 auto;padding:8px 12px calc(10px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--line);background:linear-gradient(0deg,#141422,#0d0d16);
+    display:flex;flex-direction:column;gap:8px}`,
+      to: `  footer{flex:0 0 auto;padding:8px 12px calc(10px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--line);background:linear-gradient(0deg,#141422,#0d0d16);
+    display:flex;flex-direction:column;gap:8px}
+  /* 伪全屏（点「全屏」或按 F）：藏起页头/页脚，画面区占满整屏。
+     不用 Fullscreen API —— Android WebView（VIA 等）的宿主会把它当
+     「视频全屏」处理并强制横屏，竖图也被转；CSS 方案完全绕开它。 */
+  body.fs header, body.fs footer{display:none}
+  body.fs .stage{padding:0}
+  body.fs .zoombar{bottom:14px}
+  #fsExit{display:none;position:fixed;right:10px;top:10px;z-index:30;
+    font:inherit;font-size:12.5px;color:var(--text);background:rgba(10,10,16,.74);
+    border:1px solid var(--line);border-radius:9px;padding:7px 12px;cursor:pointer;
+    -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+  body.fs #fsExit{display:block}` },
+    { from: `</footer>`,
+      to: `</footer>
+<button id="fsExit" type="button">✕ 退出全屏</button>` },
+    { from: `/* ---- 全屏 ---- */
+function toggleFull(){
+  var d=document, el=d.documentElement;
+  if(d.fullscreenElement||d.webkitFullscreenElement){
+    (d.exitFullscreen||d.webkitExitFullscreen).call(d);
+  }else{
+    (el.requestFullscreen||el.webkitRequestFullscreen).call(el);
+  }
+}
+document.getElementById("full").addEventListener("click",toggleFull);`,
+      to: `/* ---- 全屏：CSS 伪全屏（藏起页头/页脚，画面区占满）----
+   不用 Fullscreen API：Android WebView（VIA 等调用系统内核的浏览器）会把
+   requestFullscreen 交给宿主处理，宿主常按「视频全屏」对待并强制横屏 ——
+   竖图也会被转成横屏。CSS 方案不碰系统接口，所有浏览器行为一致，
+   嵌在 iframe 里也能用（不需要 allowfullscreen）。 */
+function toggleFull(){
+  /* 嵌在别人的 iframe 里（网页端的预览框）：把「全屏」请求交给外层 ——
+     自己这点「伪全屏」只能在框内变大，铺不满屏幕。 */
+  if(window.parent && window.parent !== window){
+    try{ window.parent.postMessage({ type: "art:fullscreen" }, "*"); return; }catch(_){}
+  }
+  var on = document.body.classList.toggle("fs");
+  var b = document.getElementById("full");
+  if(b) b.textContent = on ? "⛶ 退出全屏" : "⛶ 全屏";
+  setTimeout(layout, 60);        /* 可用区域变了，重算画面适配 */
+}
+document.getElementById("full").addEventListener("click",toggleFull);
+document.getElementById("fsExit").addEventListener("click",toggleFull);` },
+    /* ---------- 2026-09-15：右栏改成「自己一套缩放 / 平移」 ----------
+       原先进双栏后两栏**共享同一个 zoom**：滚轮在哪边滚都是两张一起放大，
+       右栏还压根没绑拖动 —— 就是「拖原图拖不动、拖左栏时原图却跟着跑」。
+       这批规则把它拆成两套独立状态（鼠标落在哪一栏就只动哪一栏）。
+       老页面先被上面的规则升到「共享版」，再被这批改成「独立版」；
+       用共享版生成过的作品也直接命中。
+       每条都靠 alreadyApplied 判断是否已打过，重复跑不会二次插入。
+       **from 一律只取代码行、不带注释** —— 注释在不同世代被手写改写过
+       （共享版那批规则里的注释就和模板里的不一致），带上就匹配不上了。 */
+    { from: `  #side{display:none;position:relative;flex:0 0 auto;
+    box-shadow:0 10px 40px rgba(0,0,0,.8),0 0 0 1px var(--line);border-radius:5px;overflow:hidden}`,
+      to: `  #side{display:none;position:relative;flex:0 0 auto;touch-action:none;
+    box-shadow:0 10px 40px rgba(0,0,0,.8),0 0 0 1px var(--line);border-radius:5px;overflow:hidden}` },
+    { from: `var zoom = { s: 1, tx: 0, ty: 0 };`,
+      to: `var zoom = { s: 1, tx: 0, ty: 0 };
+/* 右栏（原图）自己的一套缩放/平移：两栏互不影响，鼠标落在哪一栏就只动哪一栏 */
+var zoom2 = { s: 1, tx: 0, ty: 0 };
+/* 最后交互的是哪一栏：底部 ± 按钮与键盘 +/- 作用于它 */
+var lastPane = "left";` },
+    { from: `  else if(e.key==="0"){ e.preventDefault(); pause(); resetView(); }
+  else if(e.key==="1"){ e.preventDefault(); pause(); setZoomAt(1/fitScale); }
+  else if(e.key==="+"||e.key==="="){ e.preventDefault(); pause(); setZoomAt(zoom.s*1.4); }
+  else if(e.key==="-"||e.key==="_"){ e.preventDefault(); pause(); setZoomAt(zoom.s/1.4); }`,
+      to: `  else if(e.key==="0"){ e.preventDefault(); pause(); resetView(); resetSide(); }
+  else if(e.key==="1"){ e.preventDefault(); pause(); setZoomAt(1/fitScale); setZoomAt2(1/fitScale); }
+  else if(e.key==="+"||e.key==="="){ e.preventDefault(); pause(); zoomBy(1.4); }
+  else if(e.key==="-"||e.key==="_"){ e.preventDefault(); pause(); zoomBy(1/1.4); }` },
+    { from: `  clampPan();
+  applyView();
+}
+window.addEventListener("resize",layout);`,
+      to: `  clampPan();
+  applyView();
+  clampPan2();
+  applySide();
+}
+window.addEventListener("resize",layout);` },
+    { from: `  if(SIDEVIEW){
+    SIDEVIEW.style.transformOrigin = "0 0";
+    SIDEVIEW.style.transform = "translate(" + zoom.tx + "px," + zoom.ty + "px) scale(" + zoom.s + ")";
+  }
+  var zl = document.getElementById("zLvl");
+  if(zl) zl.textContent = Math.round(zoom.s * 100) + "%";
+}`,
+      to: `  syncZoomLabel();
+}
+/* 底部那个百分比：跟随「最后一次操作的那一栏」 */
+function syncZoomLabel(){
+  var zl = document.getElementById("zLvl");
+  if(zl) zl.textContent = Math.round((lastPane==="right"?zoom2.s:zoom.s) * 100) + "%";
+}` },
+    { from: `  e.preventDefault();
+  pause();
+  var r = frame.getBoundingClientRect();`,
+      to: `  e.preventDefault();
+  pause(); lastPane="left";
+  var r = frame.getBoundingClientRect();` },
+    { from: `sideEl.addEventListener("wheel", function(e){
+  e.preventDefault();
+  pause();
+  var sr = SIDEVIEW.getBoundingClientRect();
+  var ax = (e.clientX - sr.left) + (frame.clientWidth  - fitW*zoom.s)/2;
+  var ay = (e.clientY - sr.top ) + (frame.clientHeight - fitH*zoom.s)/2;
+  setZoomAt(zoom.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), ax, ay);
+}, { passive:false });`,
+      to: `/* 右栏（原图）：自己的一套缩放 / 平移，跟左栏各走各的 */
+function applySide(){
+  if(!SIDEVIEW) return;
+  SIDEVIEW.style.transformOrigin = "0 0";
+  SIDEVIEW.style.transform = "translate(" + zoom2.tx + "px," + zoom2.ty + "px) scale(" + zoom2.s + ")";
+  syncZoomLabel();
+}
+function clampPan2(){
+  if(!SIDEVIEW) return;
+  var sw=sideEl.clientWidth, sh=sideEl.clientHeight;
+  var mx=Math.max(0,(fitW*zoom2.s-sw)/2), my=Math.max(0,(fitH*zoom2.s-sh)/2);
+  zoom2.tx = Math.max(-mx, Math.min(mx, zoom2.tx));
+  zoom2.ty = Math.max(-my, Math.min(my, zoom2.ty));
+}
+function setZoomAt2(ns, cx, cy){
+  ns = Math.min(24, Math.max(1, ns));
+  if(cx === undefined){ cx = sideEl.clientWidth/2; cy = sideEl.clientHeight/2; }
+  var k = ns / zoom2.s;
+  zoom2.tx = cx - (cx - zoom2.tx)*k;
+  zoom2.ty = cy - (cy - zoom2.ty)*k;
+  zoom2.s = ns;
+  clampPan2(); applySide();
+}
+function resetSide(){ zoom2.s=1; zoom2.tx=0; zoom2.ty=0; applySide(); }
+sideEl.addEventListener("wheel", function(e){
+  e.preventDefault();
+  pause(); lastPane="right";
+  var r = sideEl.getBoundingClientRect();
+  setZoomAt2(zoom2.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX - r.left, e.clientY - r.top);
+}, { passive:false });
+/* 右栏的双指捏合 / 放大后单指拖动 —— 只动右栏 */
+var ptrs2 = {}, pinch2 = null, pan2 = null;
+sideEl.addEventListener("pointerdown", function(e){
+  lastPane="right";
+  ptrs2[e.pointerId] = { x:e.clientX, y:e.clientY };
+  try{ sideEl.setPointerCapture(e.pointerId); }catch(_){}
+  var ids = Object.keys(ptrs2);
+  if(ids.length === 2){
+    var a = ptrs2[ids[0]], b = ptrs2[ids[1]];
+    var r = sideEl.getBoundingClientRect();
+    pinch2 = { d:Math.hypot(a.x-b.x, a.y-b.y), s:zoom2.s,
+               cx:(a.x+b.x)/2 - r.left, cy:(a.y+b.y)/2 - r.top };
+    pan2 = null;
+  } else if(zoom2.s > 1.0001){
+    pan2 = { x:e.clientX, y:e.clientY, tx:zoom2.tx, ty:zoom2.ty };
+  }
+});
+sideEl.addEventListener("pointermove", function(e){
+  if(!ptrs2[e.pointerId]) return;
+  ptrs2[e.pointerId] = { x:e.clientX, y:e.clientY };
+  var ids = Object.keys(ptrs2);
+  if(pinch2 && ids.length >= 2){
+    e.preventDefault();
+    var a = ptrs2[ids[0]], b = ptrs2[ids[1]];
+    var d = Math.hypot(a.x-b.x, a.y-b.y);
+    if(d > 0) setZoomAt2(pinch2.s * (d/pinch2.d), pinch2.cx, pinch2.cy);
+  } else if(pan2){
+    e.preventDefault();
+    zoom2.tx = pan2.tx + (e.clientX - pan2.x);
+    zoom2.ty = pan2.ty + (e.clientY - pan2.y);
+    clampPan2(); applySide();
+  }
+}, { passive:false });
+function endPtr2(e){
+  delete ptrs2[e.pointerId];
+  if(Object.keys(ptrs2).length < 2) pinch2 = null;
+  if(Object.keys(ptrs2).length === 0) pan2 = null;
+}
+sideEl.addEventListener("pointerup", endPtr2);
+sideEl.addEventListener("pointercancel", endPtr2);` },
+    /* 这条的新增代码只有一行 lastPane="left";（16 字符），短到不足以当哨兵，
+       显式指一个更长的特征串，否则它会认不出自己已经打过、反复插同一行。 */
+    { sentinel: 'frame.addEventListener("pointerdown", function(e){\n  lastPane="left";',
+      from: `frame.addEventListener("pointerdown", function(e){
+  ptrs[e.pointerId] = { x:e.clientX, y:e.clientY };`,
+      to: `frame.addEventListener("pointerdown", function(e){
+  lastPane="left";
+  ptrs[e.pointerId] = { x:e.clientX, y:e.clientY };` },
+    { from: `document.getElementById("zIn").onclick  = function(){ pause(); setZoomAt(zoom.s * 1.4); };
+document.getElementById("zOut").onclick = function(){ pause(); setZoomAt(zoom.s / 1.4); };
+document.getElementById("zFit").onclick = function(){ pause(); resetView(); };
+document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fitScale); };`,
+      to: `/* ± 作用于「最后操作的那一栏」；⤢ 与 1:1 是全局动作，两栏一起归位 */
+function zoomBy(k){
+  if(lastPane==="right") setZoomAt2(zoom2.s * k);
+  else setZoomAt(zoom.s * k);
+}
+document.getElementById("zIn").onclick  = function(){ pause(); zoomBy(1.4); };
+document.getElementById("zOut").onclick = function(){ pause(); zoomBy(1 / 1.4); };
+document.getElementById("zFit").onclick = function(){ pause(); resetView(); resetSide(); };
+document.getElementById("zRst").onclick = function(){ pause(); setZoomAt(1 / fitScale); setZoomAt2(1 / fitScale); };` },
+  ];
+
+  /* 「这条规则是不是已经打过了」——把 to 里相对 from 新增的**代码行**按连续段切块
+     （注释行不计：规则里的注释常是手写简写版，和模板里的详细注释对不上，
+      拿带注释的整段去比对必然失配，于是重复插入），每个块都在输出里找得到才算打过。
+
+     为什么不能用单个哨兵串：短的一行代码在文档别处也会出现 ——
+     ghostEl.style.display=ghostOn?"block":"none"; 在「对照」按钮的点击处理里就有，
+     拿它当哨兵会把「还没打过的页面」误判成「打过了」，双栏隐藏对照层这种修复就永远加不上。
+     反过来也不能「任意一块命中就算打过」：旧页面可能碰巧包含其中一块。
+     所以：候选块**全部**命中才算打过。 */
+  function newBlocks(r){
+    if(r.sentinel) return [r.sentinel];
+    const toLines = String(r.to).split('\n');
+    const fromTrim = new Set((r.re ? '' : String(r.from))
+      .split('\n').map(s => s.trim()).filter(Boolean));
+    /* 只按行首判断是不是注释行：行尾挂注释的代码行（var fitW=0, fitH=0; 加一段块注释）
+       是货真价实的代码，不能连它一起排除 —— 排掉之后这条规则就认不出自己已经打过了 */
+    const isComment = (t) => !t || t.startsWith('/*') || t.startsWith('*') || t.startsWith('//');
+    const blocks = [];
+    let cur = [];
+    for(const ln of toLines){
+      const t = ln.trim();
+      /* 收进块的是**原始行（含缩进）**：块最终要拿去在未改动的原文里 indexOf，
+         带着缩进才找得到。这里踩过坑 —— 曾经 push 的是 trim 过的行，
+         结果哨兵永远匹配不上，「已经打过」恒为 false，同一条规则被反复应用。 */
+      if(t && !isComment(t) && !fromTrim.has(t) && !/\$\d/.test(t)) cur.push(ln);
+      else { if(cur.length) blocks.push(cur.join('\n')); cur = []; }
+    }
+    if(cur.length) blocks.push(cur.join('\n'));
+    let res = blocks.filter(b => b.trim().length >= 20);
+    /* 兜底：正则规则的 to 常整行都带 $1/$2，退回「不含 $n 的长片段」 */
+    if(!res.length){
+      res = String(r.to).split(/\$\d+/)
+        .map(s => s.replace(/^\n+/, '').replace(/\n+$/, ''))
+        .filter(s => s.trim().length >= 20 && !fromTrim.has(s.trim()) && !isComment(s.trim()));
+    }
+    return res;
+  }
+  function alreadyApplied(out, r){
+    const blocks = newBlocks(r);
+    return blocks.length > 0 && blocks.every(b => out.indexOf(b) >= 0);
+  }
+
+  function upgradeLayout(text){
+    let out = text, hit = 0;
+    for(const r of LAYOUT_RULES){
+      if(alreadyApplied(out, r)) continue;            // 这条的效果已经在了，别重复打
+      if(r.re){
+        if(!r.re.test(out)) continue;                 // 这条对不上：跳过，不放弃整轮
+        out = out.replace(r.re, r.to); hit++;
+      }else{
+        if(out.split(r.from).length !== 2) continue;   // 必须恰好命中一处，否则跳过
+        out = out.replace(r.from, r.to); hit++;
+      }
+    }
+    return hit ? out : null;
+  }
+
+  /* 底板色修复（2026-09-14）：早期回放页把底板写死成浅灰（#f0f0f0），
+     深色图里「与底色相近、被整簇跳过的块」会露成满屏白斑。
+     SVG 头部有权威的底板色（生成时算的 <rect fill="…">），从那里读出来替换。
+     读不到、或 HTML 里找不到那两处写死值，就原样返回（不改）。 */
+  async function fixBaseColor(htmlText, svgBlob){
+    try{
+      if(!svgBlob || !svgBlob.slice) return null;
+      const head = await svgBlob.slice(0, 1048576).text();   // 底板 rect 在文件开头
+      const m = head.match(/<rect width="[\d.]+" height="[\d.]+" fill="(#[0-9a-fA-F]{6})"/);
+      if(!m) return null;
+      const bg = m[1];
+      let hit = 0, out = htmlText;
+      out = out.replace(/(clearAll\(\)\{ ctx\.fillStyle=")#[0-9a-fA-F]{6}(")/,
+                        function(_, a, b){ hit++; return a + bg + b; });
+      out = out.replace(/(canvas\{display:block;width:100%;height:100%;background:)#[0-9a-fA-F]{6}/,
+                        function(_, a){ hit++; return a + bg; });
+      return hit ? out : null;
+    }catch(_){ return null; }
+  }
+
+  async function upgradeAxis(rec){
+    if(rec._axisDone) return rec.html;      // 本次会话里已经处理过
+    let text;
+    try{ text = await rec.html.text(); }catch(_){ return rec.html; }
+    rec._axisDone = true;
+    /* 行尾先归一化：网页版（Pyodide）写出的回放页是 LF，但本机 Windows 命令行跑
+       make_art.py 时 Python 文本模式会把每个 \n 写成 \r\n，而下面的规则和
+       AXIS_OLD / AXIS_NEW 文本都是 LF —— 不归一化，本机生成的历史记录一条都命中不了。
+       HTML 不在乎行尾，改掉没有副作用。 */
+    if(text.indexOf("\r\n") >= 0) text = text.replace(/\r\n/g, "\n");
+    let out = text, changed = false;
+    /* ① 时间轴升级（2026-09-12）：线稿从「固定 15%」改成按视觉重量自然播 */
+    if(out.indexOf("Math.sqrt(AREA[i])") >= 0){
+      // 新结构（√公式）：只差 SKETCH_T 的值 —— 网页版旧版把兜底值写成了 0.15，
+      // 那些页面运行时会走「固定占比」分支，这里改成 0 即可
+      if(out.indexOf("SKETCH_T=0.15") >= 0){
+        out = out.replace("SKETCH_T=0.15", "SKETCH_T=0"); changed = true;
+      }
+    }else if(out.indexOf(AXIS_OLD) >= 0){
+      out = out.replace(AXIS_OLD, AXIS_NEW).replace(/SKETCH_T=[0-9.]+/, "SKETCH_T=0");
+      changed = true;
+    }
+    /* ② 布局升级（2026-09-14）：换成「相册式」缩放（全屏放大铺满整屏、缩放条在底部） */
+    const lx = upgradeLayout(out);
+    if(lx){ out = lx; changed = true; }
+    /* ③ 底板色修复（2026-09-14）：深色图的底板要和 SVG 里的一致，否则满屏白斑 */
+    const bc = await fixBaseColor(out, rec.svg);
+    if(bc){ out = bc; changed = true; }
+    return changed ? new Blob([out], { type: "text/html" }) : rec.html;
+  }
+
+  /* 升级后的 HTML 对象 URL（按记录缓存，避免重复处理十几 MB 文本） */
+  async function htmlUrlOf(rec){
+    const u = urlsOf(rec);
+    if(u.html) return u.html;
+    const blob = await upgradeAxis(rec);
+    u.html = URL.createObjectURL(blob);
+    return u.html;
+  }
+
+  async function renderHistory(){
+    const list = await dbAll();
+    const card = $('historyCard'), box = $('hList');
+    if(!list.length){ card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    const total = list.reduce((n, r) => n + (r.size || 0), 0);
+    let quota = '（存在本机浏览器里）';
+    if(navigator.storage && navigator.storage.estimate){
+      try{
+        const est = await navigator.storage.estimate();
+        if(est.quota) quota = '占用 ' + fmtSize(total) + ' / 可用 ' + fmtSize(est.quota);
+      }catch(_){}
+    }
+    $('hQuota').textContent = list.length + ' 项 · ' + quota;
+
+    box.innerHTML = '';
+    for(const r of list){
+      const el = document.createElement('div');
+      el.className = 'hitem';
+
+      const img = document.createElement('img');
+      img.alt = '';
+      if(r.thumb) img.src = r.thumb;
+      el.appendChild(img);
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const t1 = document.createElement('div');
+      t1.className = 't'; t1.textContent = r.title || r.name;
+      const d1 = document.createElement('div');
+      d1.className = 'd';
+      d1.textContent = fmtTime(r.at) + ' · ' + (r.strokes || 0).toLocaleString() + ' 色块 · ' +
+                       (r.size && r.dims ? fmtSize(r.size) + ' · ' : '') + (r.dims || '');
+      meta.appendChild(t1); meta.appendChild(d1);
+      el.appendChild(meta);
+
+      const acts = document.createElement('div');
+      acts.className = 'acts';
+      const mk = (label, cls, fn, title) => {
+        const b = document.createElement('button');
+        b.textContent = label; if(cls) b.className = cls;
+        if(title) b.title = title;
+        b.onclick = fn; acts.appendChild(b); return b;
+      };
+      mk('▶ 预览', 'p', async () => {
+        const html = await upgradeAxis(r);       // 旧记录会先升级时间轴与布局
+        openPreview(await html.text());
+      }, '全屏预览回放页');
+      mk('⬇ SVG', '', () => {
+        const a = document.createElement('a');
+        a.href = urlsOf(r).svg; a.download = (r.name || 'artwork') + '.svg';
+        document.body.appendChild(a); a.click(); a.remove();
+      });
+      mk('⬇ HTML', '', async () => {
+        const url = await htmlUrlOf(r);      // 下载的也是升级后的版本
+        const a = document.createElement('a');
+        a.href = url; a.download = (r.name || 'artwork') + '.html';
+        document.body.appendChild(a); a.click(); a.remove();
+      });
+      mk('删除', 'del', async () => {
+        await dbDel(r.id);
+        const u = urlCache.get(r.id);
+        if(u){
+          URL.revokeObjectURL(u.svg);
+          if(u.html) URL.revokeObjectURL(u.html);
+          urlCache.delete(r.id);
+        }
+        renderHistory();
+      });
+      el.appendChild(acts);
+      box.appendChild(el);
+    }
+  }
+
+  /* 「清理空间」：按上限删掉最旧的，并报告释放了多少 */
+  $('hPrune').addEventListener('click', async () => {
+    const before = await dbAll();
+    const beforeBytes = before.reduce((n, r) => n + (r.size || 0), 0);
+    if(!before.length){ alert('还没有生成记录。'); return; }
+    if(!confirm(
+      `当前 ${before.length} 项，共 ${fmtSize(beforeBytes)}。\n\n` +
+      `将按「最多 ${MAX_ITEMS} 项 / ${fmtSize(MAX_BYTES)}」的规则，` +
+      `删除最旧的记录直到符合上限。\n已下载到本地的文件不受影响。继续？`)) return;
+    const kept = await prune();
+    const afterBytes = kept.reduce((n, r) => n + (r.size || 0), 0);
+    renderHistory();
+    alert(`已清理 ${before.length - kept.length} 项，释放 ${fmtSize(beforeBytes - afterBytes)}。\n` +
+          `当前 ${kept.length} 项，共 ${fmtSize(afterBytes)}。`);
+  });
+
+  $('hClear').addEventListener('click', async () => {
+    const list = await dbAll();
+    if(!list.length){ alert('还没有生成记录。'); return; }
+    const bytes = list.reduce((n, r) => n + (r.size || 0), 0);
+    if(!confirm(
+      `清空全部 ${list.length} 项生成历史，释放约 ${fmtSize(bytes)}？\n\n` +
+      `此操作不可撤销。已经下载到本地的文件不受影响。`)) return;
+    for(const u of urlCache.values()){
+      URL.revokeObjectURL(u.svg);
+      if(u.html) URL.revokeObjectURL(u.html);
+    }
+    urlCache.clear();
+    await wrap(tx('readwrite').clear());
+    renderHistory();
+  });
+
+  /* 保存一条记录（超配额时自动删旧的再试） */
+  async function saveHistory(rec, blobs){
+    const item = Object.assign({}, rec, {
+      svg: blobs.svg, html: blobs.html,
+      size: (blobs.svg.size || 0) + (blobs.html.size || 0),
+      at: Date.now(),
+    });
+    try{
+      await dbPut(item);
+    }catch(e){
+      if(e && (e.name === 'QuotaExceededError' || /quota/i.test(String(e.message)))){
+        await prune();                       // 先清一批再试
+        try{ await dbPut(item); }
+        catch(_){ say('浏览器存储空间不足，这次结果没存进历史（可以直接下载）', 'err'); }
+      } else {
+        say('写入历史失败：' + (e && e.message || e), 'err');
+      }
+    }
+    await renderHistory();
+  }
+
+  /* ---------- Worker ---------- */
+  function boot(){
+    // 首次点开页面就开始预热，等用户选完图基本就绪
+    worker = new Worker('worker.js', { type: 'module' });
+    worker.onmessage = (ev) => {
+      const m = ev.data;
+      if(m.type === 'status'){
+        status.textContent = m.text;
+        bar.classList.add('indet');
+      } else if(m.type === 'ready'){
+        ready = true;
+        bar.classList.remove('indet');
+        // 包装好了就把提示条收起来，但保留缓存信息（挪到进度区显示）
+        $('bootWarn').style.display = 'none';
+        refreshCacheInfo();
+        go.disabled = !file;
+        if(!busy) status.textContent = '就绪';
+      } else if(m.type === 'cacheinfo'){
+        showCacheInfo(m);
+      } else if(m.type === 'cachecleared'){
+        $('clearCache').disabled = false;
+        showCacheInfo({ count: 0, bytes: 0, supported: m.freed !== undefined });
+        alert('已清除运行时缓存，释放 ' + fmtSize(m.freed || 0) + '。\n下次打开需要重新下载。');
+      } else if(m.type === 'cache'){
+        // 实时告诉用户：这次是读缓存还是走网络
+        const s = m.stats || {};
+        if(m.state === 'hit'){
+          $('netInfo').innerHTML = '本次运行：已从本地缓存读取 <b>' + s.cached + '</b> 个文件（不消耗流量）';
+        } else {
+          $('netInfo').innerHTML = '本次运行：正在下载 <b>' + (s.bytes/1048576).toFixed(1) +
+            ' MB</b>（' + s.files + ' 个文件），之后会缓存到本地';
+        }
+      } else if(m.type === 'log'){
+        if(m.text.startsWith('{"_progress"')){
+          try{
+            const p = JSON.parse(m.text)._progress;
+            bar.classList.remove('indet');
+            barFill.style.width = (p * 100).toFixed(1) + '%';
+            status.textContent = '生成中… ' + Math.round(p * 100) + '%';
+          }catch(_){}
+        } else {
+          say(m.text);
+        }
+      } else if(m.type === 'done'){
+        onDone(m);
+      } else if(m.type === 'error'){
+        busy = false; go.disabled = false;
+        bar.classList.remove('indet');
+        status.innerHTML = '<span class="err">出错了</span>';
+        say(m.text, 'err');
+        go.textContent = '重试';
+      }
+    };
+    worker.onerror = (e) => {
+      bar.classList.remove('indet');
+      status.innerHTML = '<span class="err">启动失败</span>';
+      say(String(e.message || e), 'err');
+    };
+    worker.postMessage({ type: 'boot' });
+  }
+
+  function mb(n){ return (n / 1048576).toFixed(1) + ' MB'; }
+
+  function showCacheInfo(m){
+    const el = $('cacheInfo');
+    if(!m.supported){ el.textContent = '当前浏览器不支持本地缓存，每次都要下载。'; return; }
+    if(m.count){
+      el.innerHTML = '✓ 运行时已缓存到本机：<b>' + m.count + ' 个文件 · ' + fmtSize(m.bytes) +
+                     '</b>，下次打开直接读取。';
+    } else {
+      el.innerHTML = '尚未缓存，本次会下载约 21 MB。';
+    }
+  }
+
+  async function refreshCacheInfo(){
+    if(!worker) return;
+    worker.postMessage({ type: 'cachesummary' });
+  }
+
+  async function onDone(m){
+    busy = false;
+    go.disabled = false;
+    go.textContent = '再生成一次';
+    barFill.style.width = '100%';
+    status.textContent = '完成';
+
+    const svgBlob = new Blob([m.svg], { type: 'image/svg+xml' });
+    const htmlBlob = new Blob([m.html], { type: 'text/html' });
+    lastHtmlText = new TextDecoder().decode(m.html);   // 预览走 srcdoc，见 openPreview
+    const name = ($('title').value || 'artwork').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40) || 'artwork';
+
+    const urlSvg = URL.createObjectURL(svgBlob);
+    const urlHtml = URL.createObjectURL(htmlBlob);
+    const a1 = $('dlSvg'), a2 = $('dlHtml');
+    a1.href = urlSvg;  a1.download = name + '.svg';
+    a2.href = urlHtml; a2.download = name + '.html';
+    // 用 <a target="_blank"> 而不是 window.open：不会被弹窗拦截，手机浏览器也更稳
+    $('openHtml').href = urlHtml;
+    $('szSvg').textContent = mb(m.svgBytes);
+    $('szHtml').textContent = mb(m.htmlBytes);
+    $('doneNote').textContent =
+      m.strokes.toLocaleString() + ' 个色块 · 画布 ' + m.size.join('×') +
+      ' · 回放页可直接在手机或电脑打开';
+
+    $('frame').srcdoc = lastHtmlText;   // 结果卡的预览同样走 srcdoc（WebView 会拦 blob）
+    $('result').style.display = 'block';
+    $('outCard').classList.add('hasResult');
+
+    // 存进历史（缩略图取用户选的原图）
+    const thumb = file ? await thumbOf(file) : '';
+    await saveHistory({
+      id: 'r' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+      name, title: $('title').value || 'artwork',
+      strokes: m.strokes, dims: m.size.join('×'),
+      thumb,
+    }, { svg: svgBlob, html: htmlBlob });
+  }
+
+  /* ---------- 开始 ---------- */
+  go.addEventListener('click', async () => {
+    if(!file || !ready || busy) return;
+    busy = true; go.disabled = true;
+    $('result').style.display = 'none';
+    $('outCard').classList.remove('hasResult');   // 生成中：结果卡回到引导区，完成了再亮结果
+    $('progWrap').style.display = 'block';
+    logEl.innerHTML = '';
+    barFill.style.width = '0%';
+    bar.classList.remove('indet');
+    status.textContent = '读取文件…';
+
+    const buf = await file.arrayBuffer();
+    const m = /\.([a-z0-9]+)$/i.exec(file.name);
+    worker.postMessage({
+      type: 'run',
+      data: buf,
+      ext: '.' + (m ? m[1].toLowerCase() : 'png'),
+      name: 'artwork',
+      title: $('title').value || '逐笔绘制回放',
+      duration: parseInt($('duration').value, 10) || 90,
+      maxWidth: parseInt(maxWidth, 10),
+      preprocess: preprocess,
+    }, [buf]);
+  });
+
+  $('clearCache').addEventListener('click', () => {
+    if(!worker) return;
+    if(!confirm('清除已缓存的 Python 运行时（约 21 MB）？\n\n' +
+                '下次打开需要重新下载，换不来任何好处，除非你遇到了加载异常。')) return;
+    $('clearCache').disabled = true;
+    worker.postMessage({ type: 'clearcache' });
+  });
+
+  /* 启动 */
+  (async () => {
+    try{
+      db = await openDB();
+      await renderHistory();
+    }catch(e){
+      console.warn('历史功能不可用：', e);
+    }
+    boot();
+  })();
+})();
+</script>
+</body>
+</html>

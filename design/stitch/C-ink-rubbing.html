@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>图片转 SVG 刻本 · 数字化金石拓印与矢构档案</title>
+<!-- Google Fonts: Noto Serif SC & JetBrains Mono -->
+<!-- Material Symbols Outlined -->
+<!-- Tailwind CSS CDN -->
+<script src="vendor/tailwind.js"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "inverse-on-surface": "#f7efea",
+            "on-primary-fixed": "#410100",
+            "primary": "#872316",
+            "surface-container-lowest": "#ffffff",
+            "tertiary-fixed": "#a1efff",
+            "on-secondary-container": "#6b635c",
+            "on-secondary": "#ffffff",
+            "on-primary-fixed-variant": "#862115",
+            "on-error-container": "#93000a",
+            "on-tertiary": "#ffffff",
+            "error": "#ba1a1a",
+            "secondary-fixed-dim": "#cfc5bc",
+            "on-background": "#1e1b18",
+            "on-surface": "#1e1b18",
+            "outline": "#8b716d",
+            "secondary-container": "#ebe1d7",
+            "tertiary": "#004f5a",
+            "inverse-primary": "#ffb4a8",
+            "surface": "#fff8f4",
+            "primary-fixed-dim": "#ffb4a8",
+            "primary-container": "#a83a2b",
+            "on-surface-variant": "#57423e",
+            "surface-container-highest": "#e9e1dc",
+            "surface-container-high": "#efe7e1",
+            "outline-variant": "#dec0ba",
+            "tertiary-container": "#006977",
+            "surface-bright": "#fff8f4",
+            "on-secondary-fixed-variant": "#4c463f",
+            "secondary": "#645d56",
+            "secondary-fixed": "#ebe1d7",
+            "on-secondary-fixed": "#201b15",
+            "on-primary-container": "#ffcfc7",
+            "surface-dim": "#e0d9d3",
+            "error-container": "#ffdad6",
+            "on-tertiary-fixed-variant": "#004e59",
+            "surface-container-low": "#faf2ed",
+            "surface-container": "#f4ece7",
+            "on-primary": "#ffffff",
+            "on-tertiary-fixed": "#001f25",
+            "surface-tint": "#a7392a",
+            "inverse-surface": "#33302c",
+            "primary-fixed": "#ffdad4",
+            "background": "#fff8f4",
+            "surface-variant": "#e9e1dc",
+            "on-tertiary-container": "#98e6f6",
+            "tertiary-fixed-dim": "#85d2e2",
+            "on-error": "#ffffff"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "space-md": "1rem",
+            "space-lg": "1.5rem",
+            "margin": "3rem",
+            "margin-mobile": "1.25rem",
+            "space-sm": "0.5rem",
+            "gutter": "1.5rem",
+            "space-xl": "2.5rem",
+            "space-xs": "0.25rem",
+            "gutter-mobile": "1rem"
+          },
+          "fontFamily": {
+            "code-num": ["Consolas","Courier New", "monospace"],
+            "body-sm": ["Songti SC","SimSun", "serif"],
+            "label-sm": ["Consolas","Courier New", "monospace"],
+            "headline-md": ["Songti SC","SimSun", "serif"],
+            "title-md": ["Songti SC","SimSun", "serif"],
+            "body-md": ["Songti SC","SimSun", "serif"],
+            "display": ["Songti SC","SimSun", "serif"],
+            "headline-sm": ["Songti SC","SimSun", "serif"],
+            "body-lg": ["Songti SC","SimSun", "serif"],
+            "label-md": ["Consolas","Courier New", "monospace"],
+            "display-mobile": ["Songti SC","SimSun", "serif"],
+            "headline-lg-mobile": ["Songti SC","SimSun", "serif"],
+            "headline-lg": ["Songti SC","SimSun", "serif"]
+          },
+          "fontSize": {
+            "code-num": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+            "body-sm": ["13px", { "lineHeight": "20px", "fontWeight": "400" }],
+            "label-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.06em", "fontWeight": "400" }],
+            "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+            "title-md": ["17px", { "lineHeight": "24px", "fontWeight": "600" }],
+            "body-md": ["15px", { "lineHeight": "24px", "fontWeight": "400" }],
+            "display": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+            "headline-sm": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+            "body-lg": ["17px", { "lineHeight": "28px", "fontWeight": "400" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "500" }],
+            "display-mobile": ["32px", { "lineHeight": "40px", "letterSpacing": "0em", "fontWeight": "700" }],
+            "headline-lg-mobile": ["26px", { "lineHeight": "34px", "letterSpacing": "0em", "fontWeight": "600" }],
+            "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.005em", "fontWeight": "600" }]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    /* Classic rice paper / ink rubbing feel: eliminate focus rings & shadows */
+    *:focus-visible {
+      outline: 1px solid #872316 !important;
+      outline-offset: 1px;
+    }
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: #dec0ba;
+      height: 2px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 12px;
+      height: 12px;
+      background: #872316;
+      border: 1px solid #1e1b18;
+      cursor: pointer;
+    }
+    /* Custom vertical scrollbar for book catalog layout */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f4ece7;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #dec0ba;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface min-h-screen flex flex-col font-body-md text-body-md antialiased selection:bg-primary selection:text-white">
+<!-- ================= TOP APP BAR (Shared Components Alignment) ================= -->
+<header class="bg-surface dark:bg-inverse-surface border-b border-outline-variant dark:border-outline sticky top-0 z-40">
+<div class="flex justify-between items-center w-full px-space-lg py-space-sm max-w-screen-2xl mx-auto">
+<!-- Brand & Global Nav Links -->
+<div class="flex items-center space-x-8">
+<a class="flex items-center space-x-2" href="#">
+<!-- Cinnabar Chop Brand Seal -->
+<div class="w-6 h-6 border border-primary bg-primary-fixed flex items-center justify-center text-primary font-bold text-xs">
+            刻
+          </div>
+<span class="font-headline-sm text-headline-sm tracking-tight text-on-surface dark:text-inverse-on-surface font-semibold">
+            图片转 SVG 刻本
+          </span>
+</a>
+<!-- Desktop Navigation Items -->
+<nav class="hidden md:flex items-center space-x-6 pt-1">
+<a class="border-b-2 border-primary dark:border-inverse-primary text-primary dark:text-inverse-primary font-title-md text-title-md pb-1" href="#">
+            刻印工坊
+          </a>
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-on-surface dark:hover:text-inverse-on-surface font-body-md text-body-md pb-1 transition-colors" href="#">
+            拓本档案
+          </a>
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-on-surface dark:hover:text-inverse-on-surface font-body-md text-body-md pb-1 transition-colors" href="#">
+            笔画回放
+          </a>
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-on-surface dark:hover:text-inverse-on-surface font-body-md text-body-md pb-1 transition-colors" href="#">
+            字法参考
+          </a>
+</nav>
+</div>
+<!-- Trailing Status & Actions -->
+<div class="flex items-center space-x-4">
+<div class="hidden lg:flex items-center space-x-2 text-label-sm font-label-sm text-secondary bg-surface-container-low px-2.5 py-1 border border-outline-variant">
+<span class="w-1.5 h-1.5 bg-primary inline-block"></span>
+<span>CPython + OpenCV (WebAssembly) 就绪 · 纯本地运行</span>
+</div>
+<div class="flex items-center space-x-2">
+<button class="px-3 py-1 text-label-sm font-label-sm border border-on-surface text-on-surface hover:bg-on-surface hover:text-surface transition-colors">
+            批注
+          </button>
+<button class="px-3.5 py-1 text-label-sm font-label-sm bg-primary text-on-primary hover:bg-[#6f1a10] transition-colors border border-primary">
+            导出 SVG
+          </button>
+<div class="hidden sm:flex items-center space-x-1 pl-2 border-l border-outline-variant text-secondary">
+<button class="p-1 hover:text-on-surface transition-colors" title="历史记录">
+<span class="material-symbols-outlined text-[18px]">history_edu</span>
+</button>
+<button class="p-1 hover:text-on-surface transition-colors" title="设置">
+<span class="material-symbols-outlined text-[18px]">settings</span>
+</button>
+<button class="p-1 hover:text-on-surface transition-colors" title="帮助">
+<span class="material-symbols-outlined text-[18px]">help_outline</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</header>
+<!-- Editorial Sub-banner (Formal Print Inscription) -->
+<div class="bg-surface-container-low border-b border-outline-variant px-space-lg py-2">
+<div class="max-w-screen-2xl mx-auto flex flex-col md:flex-row justify-between items-baseline gap-1 text-secondary">
+<div class="flex items-center space-x-3">
+<span class="font-title-md text-title-md text-on-surface">图片转 SVG</span>
+<span class="text-outline-variant">|</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">把照片变成矢量 SVG，并回放整个作画过程 · 全部在你的浏览器里完成，图片不上传</span>
+</div>
+<div class="font-label-sm text-label-sm text-secondary">
+        纸型规格：金石册页 1280 像素基准
+      </div>
+</div>
+</div>
+<!-- ================= MAIN WORKSPACE (Two-Column Layout) ================= -->
+<main class="flex-1 max-w-screen-2xl w-full mx-auto p-4 md:p-6 lg:p-8 flex flex-col gap-8">
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+<!-- ================= LEFT COLUMN: Tool Parameters (approx 380px -> 4 cols on lg) ================= -->
+<section class="lg:col-span-4 bg-surface-container-low border border-outline-variant p-5 flex flex-col gap-6">
+<!-- Section Header Plate -->
+<div class="border-b border-on-surface pb-2">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">印版参数与输入</h2>
+<span class="text-label-sm font-label-sm text-primary border border-primary px-1.5 py-0.2 bg-surface">拓本源样</span>
+</div>
+<div class="mt-1 h-[2px] bg-outline-variant"></div>
+</div>
+<!-- Image Picker Section -->
+<div class="flex flex-col gap-3">
+<span class="font-label-md text-label-md text-on-surface-variant">原片样本 (SOURCE)</span>
+<!-- Selected Image Card -->
+<div class="border border-outline-variant bg-surface p-2.5 flex items-start gap-3">
+<div class="w-20 h-24 flex-shrink-0 bg-surface-container-high border border-outline-variant overflow-hidden">
+<img alt="原片肖像：暗调走廊中身穿深色外套的沉思女子" class="w-full h-full object-cover grayscale contrast-125 hover:grayscale-0 transition-all duration-300" src="vendor/img/img-d40b5f4c13.jpg"/>
+</div>
+<div class="flex-1 min-w-0 flex flex-col justify-between h-24 py-0.5">
+<div>
+<div class="font-title-md text-title-md text-on-surface truncate">走廊人像.jpg</div>
+<div class="font-label-sm text-label-sm text-secondary mt-0.5">1440 × 1920 · 1.4 MB</div>
+<div class="mt-1 font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+<span>原图已加载就绪</span>
+</div>
+</div>
+<button class="text-left font-label-sm text-label-sm text-primary hover:underline flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[13px]">refresh</span> 重新置换原图
+              </button>
+</div>
+</div>
+<!-- Drop target -->
+<div class="border border-dashed border-outline hover:border-primary transition-colors p-4 text-center cursor-pointer bg-surface-container">
+<div class="flex flex-col items-center justify-center gap-1">
+<span class="material-symbols-outlined text-secondary text-[22px]">add_photo_alternate</span>
+<span class="font-body-sm text-body-sm text-on-surface">点击或拖入图片</span>
+<span class="font-label-sm text-label-sm text-secondary">支持 JPG, PNG, WebP 格式</span>
+</div>
+</div>
+</div>
+<!-- Quality Selector (4 options with honest estimates) -->
+<div class="flex flex-col gap-2.5">
+<label class="font-label-md text-label-md text-on-surface-variant">刻印精度与耗时预估</label>
+<div class="grid grid-cols-1 gap-1.5">
+<!-- Option 1 -->
+<label class="border border-outline-variant bg-surface px-3 py-2 flex items-center justify-between cursor-pointer hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-2.5">
+<div class="w-3.5 h-3.5 border border-on-surface flex items-center justify-center">
+<!-- Unchecked square -->
+</div>
+<span class="font-body-sm text-body-sm text-on-surface">快速</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary">800 · 约 1 分钟</span>
+</label>
+<!-- Option 2: SELECTED -->
+<label class="border-2 border-primary bg-surface px-3 py-2 flex items-center justify-between cursor-pointer relative">
+<div class="flex items-center gap-2.5">
+<div class="w-3.5 h-3.5 border border-primary flex items-center justify-center">
+<div class="w-2 h-2 bg-primary"></div>
+</div>
+<span class="font-title-md text-title-md text-primary">标准</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-label-sm text-label-sm text-primary font-semibold">1200 · 约 1.5 分钟</span>
+<span class="w-1.5 h-1.5 bg-primary"></span>
+</div>
+</label>
+<!-- Option 3 -->
+<label class="border border-outline-variant bg-surface px-3 py-2 flex items-center justify-between cursor-pointer hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-2.5">
+<div class="w-3.5 h-3.5 border border-on-surface flex items-center justify-center">
+</div>
+<span class="font-body-sm text-body-sm text-on-surface">高清</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary">1600 · 约 2.5 分钟</span>
+</label>
+<!-- Option 4 -->
+<label class="border border-outline-variant bg-surface px-3 py-2 flex items-center justify-between cursor-pointer hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-2.5">
+<div class="w-3.5 h-3.5 border border-on-surface flex items-center justify-center">
+</div>
+<span class="font-body-sm text-body-sm text-on-surface">最高</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary">不缩放 · 最清晰</span>
+</label>
+</div>
+</div>
+<!-- Image-Type Segmented Tabs -->
+<div class="flex flex-col gap-2">
+<label class="font-label-md text-label-md text-on-surface-variant">画面分类识别</label>
+<div class="grid grid-cols-3 border border-outline-variant bg-surface p-1 gap-1">
+<button class="py-1.5 font-body-sm text-body-sm text-center bg-primary text-on-primary font-medium">
+              自动
+            </button>
+<button class="py-1.5 font-body-sm text-body-sm text-center text-secondary hover:text-on-surface transition-colors">
+              照片
+            </button>
+<button class="py-1.5 font-body-sm text-body-sm text-center text-secondary hover:text-on-surface transition-colors">
+              插画
+            </button>
+</div>
+<p class="font-body-sm text-body-sm text-secondary text-xs leading-relaxed mt-1">
+            * 小图会被自动放大 2 倍再描摹（轮廓更顺、色块更干净）
+          </p>
+</div>
+<!-- Text Input: Title & Replay Duration -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+<div class="sm:col-span-2 flex flex-col gap-1">
+<label class="font-label-sm text-label-sm text-on-surface-variant">印卷题名</label>
+<input class="w-full bg-surface border border-outline-variant px-3 py-1.5 font-body-md text-body-md text-on-surface focus:border-primary rounded-none shadow-none" type="text" value="走廊人像"/>
+</div>
+<div class="flex flex-col gap-1">
+<label class="font-label-sm text-label-sm text-on-surface-variant">回放秒数</label>
+<div class="relative">
+<input class="w-full bg-surface border border-outline-variant px-3 py-1.5 font-code-num text-code-num text-on-surface focus:border-primary rounded-none shadow-none pr-7" type="number" value="90"/>
+<span class="absolute right-2 top-2 font-label-sm text-label-sm text-secondary">秒</span>
+</div>
+</div>
+</div>
+<!-- Primary Action CTA -->
+<div class="pt-2">
+<button class="w-full bg-primary-container text-on-primary hover:bg-[#8e2f22] active:translate-y-px transition-all py-3 px-4 border border-on-surface font-title-md text-title-md tracking-wider flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[20px]">draw</span>
+<span>开始生成</span>
+</button>
+<div class="text-center mt-2 font-label-sm text-label-sm text-secondary">
+            基于本地 CPython 矢量核 · 不产生网络流量
+          </div>
+</div>
+</section>
+<!-- ================= RIGHT COLUMN: Hero Artwork Stage (8 cols on lg) ================= -->
+<section class="lg:col-span-8 flex flex-col gap-4">
+<!-- Top bar of stage: Artwork title & Live honest counter -->
+<div class="border border-outline-variant bg-surface-container-low p-3.5 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+<div class="flex items-center space-x-3">
+<span class="w-2.5 h-2.5 bg-primary animate-pulse"></span>
+<h1 class="font-title-md text-title-md text-on-surface font-bold">走廊人像 · 矢量拓印作画中</h1>
+</div>
+<div class="flex items-center space-x-3 font-code-num text-code-num text-secondary">
+<span>已绘制 <strong class="text-primary font-semibold">128,430</strong> / 172,471 笔</span>
+<span class="text-outline-variant">|</span>
+<span class="font-label-sm text-label-sm bg-primary-fixed text-primary px-1.5 py-0.5 border border-outline-variant">74.4%</span>
+</div>
+</div>
+<!-- Archival Rubbing Plate Canvas Area -->
+<div class="border-2 border-on-surface bg-surface relative p-4 md:p-8 flex flex-col items-center justify-center min-h-[580px]">
+<!-- Inner Editorial Thin Frame Margin -->
+<div class="w-full h-full border border-outline-variant p-3 md:p-6 flex flex-col items-center justify-center relative">
+<!-- Traditional Corner Registration Marks (Chinese Print Register) -->
+<div class="absolute top-1 left-1 w-3 h-3 border-t border-l border-on-surface"></div>
+<div class="absolute top-1 right-1 w-3 h-3 border-t border-r border-on-surface"></div>
+<div class="absolute bottom-1 left-1 w-3 h-3 border-b border-l border-on-surface"></div>
+<div class="absolute bottom-1 right-1 w-3 h-3 border-b border-r border-on-surface"></div>
+<!-- Authentic Vermilion Seal Chop: Top Right -->
+<div class="absolute top-4 right-4 z-20 border-2 border-primary text-primary px-1.5 py-2 flex flex-col items-center leading-none font-title-md font-bold tracking-widest bg-surface">
+<span class="text-[13px]">墨</span>
+<span class="text-[13px] my-0.5">化</span>
+<span class="text-[13px]">真</span>
+<span class="text-[13px] mt-0.5">迹</span>
+</div>
+<!-- Artwork Image (Vector mid-trace) -->
+<div class="relative max-w-lg w-full aspect-[3/4] flex items-center justify-center bg-[#fdfaf7] border border-outline-variant overflow-hidden">
+<img alt="女性侧影轮廓分色着墨阶段矢量图" class="w-full h-full object-contain mix-blend-multiply" src="vendor/img/img-ef0d464671.jpg"/>
+<!-- Subtle Simulated Pen Tracer Indicator (showing active vector path) -->
+<div class="absolute top-[48%] left-[44%] w-3 h-3 border border-primary -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+<div class="w-1 h-1 bg-primary m-auto mt-[3px]"></div>
+</div>
+</div>
+<!-- Plate Inscription Caption (Underneath Canvas) -->
+<div class="mt-4 text-center border-t border-outline-variant pt-2 w-full max-w-lg flex justify-between items-center text-secondary font-body-sm text-body-sm">
+<span>图版一 · 矢量轮廓分色着墨阶段</span>
+<span class="font-code-num text-code-num text-xs">层级：4 / 7 · 贝塞尔闭合路径</span>
+</div>
+</div>
+</div>
+<!-- ================= REPLAY CONTROL BAR ================= -->
+<div class="border border-on-surface bg-surface-container-low p-3.5 flex flex-col md:flex-row items-center justify-between gap-4">
+<!-- Play / Pause Button & Timeline Scrub -->
+<div class="flex items-center gap-3 w-full md:w-auto md:flex-1">
+<button class="w-8 h-8 border border-on-surface bg-surface flex items-center justify-center text-on-surface hover:bg-on-surface hover:text-surface transition-colors flex-shrink-0" title="暂停/播放">
+<span class="material-symbols-outlined text-[18px]">pause</span>
+</button>
+<!-- Scrub Timeline Track -->
+<div class="flex-1 flex items-center gap-3">
+<input class="w-full cursor-pointer accent-primary" max="90" min="0" type="range" value="42"/>
+<span class="font-code-num text-code-num text-on-surface text-xs whitespace-nowrap">00:42 / 01:30</span>
+</div>
+</div>
+<!-- Speed & Zoom Controls -->
+<div class="flex items-center justify-between w-full md:w-auto gap-4 border-t md:border-t-0 border-outline-variant pt-2 md:pt-0">
+<!-- Speed Selector -->
+<div class="flex items-center border border-outline-variant bg-surface">
+<button class="px-2 py-1 font-code-num text-xs text-secondary hover:text-on-surface">0.5x</button>
+<button class="px-2 py-1 font-code-num text-xs bg-primary text-on-primary font-semibold">1x</button>
+<button class="px-2 py-1 font-code-num text-xs text-secondary hover:text-on-surface">2x</button>
+<button class="px-2 py-1 font-code-num text-xs text-secondary hover:text-on-surface">4x</button>
+</div>
+<!-- Zoom Controls -->
+<div class="flex items-center border border-outline-variant bg-surface">
+<button class="px-2 py-1 hover:bg-surface-container text-on-surface" title="缩小">
+<span class="material-symbols-outlined text-[14px]">remove</span>
+</button>
+<span class="px-2 py-1 font-code-num text-xs border-x border-outline-variant text-on-surface">1:1</span>
+<button class="px-2 py-1 hover:bg-surface-container text-on-surface" title="放大">
+<span class="material-symbols-outlined text-[14px]">add</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- ================= BOTTOM STRIP: Archive History Cards ================= -->
+<section class="border-t-2 border-on-surface pt-6 pb-2">
+<div class="flex flex-col sm:flex-row justify-between sm:items-baseline gap-1 mb-4">
+<div class="flex items-center space-x-3">
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-semibold">生成历史</h2>
+<span class="text-outline-variant">/</span>
+<span class="font-body-sm text-body-sm text-secondary">本地保留的最近拓印 · 纯浏览器 IndexedDB 缓存</span>
+</div>
+<a class="font-label-sm text-label-sm text-primary hover:underline" href="#">查看全部存档印牒 →</a>
+</div>
+<!-- 4 Earlier SVG Thumbnails in Clean Archival Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+<!-- History Item 1 -->
+<div class="border border-outline-variant bg-surface hover:border-on-surface transition-colors p-3 flex flex-col gap-2.5 group cursor-pointer">
+<div class="aspect-video w-full bg-surface-container flex items-center justify-center border border-outline-variant overflow-hidden relative">
+<!-- Simulated Stylized Ink Print Graphic -->
+<div class="w-full h-full p-2 flex items-center justify-center text-secondary opacity-80 group-hover:opacity-100 transition-opacity">
+<svg class="w-full h-full stroke-on-surface fill-none" stroke-width="0.8" viewbox="0 0 100 60">
+<path d="M10 50 Q 25 15 50 35 T 90 20"></path>
+<rect fill="#ebe1d7" height="18" stroke="#872316" stroke-width="0.6" width="18" x="20" y="30"></rect>
+<line stroke="#8b716d" stroke-dasharray="2,2" x1="5" x2="95" y1="50" y2="50"></line>
+</svg>
+</div>
+<span class="absolute bottom-1 right-1 font-label-sm text-[9px] bg-surface text-secondary px-1 border border-outline-variant">SVG</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-md text-title-md text-on-surface group-hover:text-primary transition-colors">书斋静物</span>
+<div class="flex justify-between items-center text-secondary font-label-sm text-label-sm mt-1">
+<span>3 天前</span>
+<span class="font-code-num text-code-num">142K 笔</span>
+</div>
+</div>
+</div>
+<!-- History Item 2 -->
+<div class="border border-outline-variant bg-surface hover:border-on-surface transition-colors p-3 flex flex-col gap-2.5 group cursor-pointer">
+<div class="aspect-video w-full bg-surface-container flex items-center justify-center border border-outline-variant overflow-hidden relative">
+<div class="w-full h-full p-2 flex items-center justify-center text-secondary opacity-80 group-hover:opacity-100 transition-opacity">
+<svg class="w-full h-full stroke-on-surface fill-none" stroke-width="0.8" viewbox="0 0 100 60">
+<path d="M50 55 L 48 30 L 35 20 M 48 30 L 65 15" stroke-width="1.2"></path>
+<circle cx="35" cy="20" fill="#a83a2b" r="4" stroke="none"></circle>
+<line stroke="#8b716d" x1="5" x2="95" y1="55" y2="55"></line>
+</svg>
+</div>
+<span class="absolute bottom-1 right-1 font-label-sm text-[9px] bg-surface text-secondary px-1 border border-outline-variant">SVG</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-md text-title-md text-on-surface group-hover:text-primary transition-colors">古松枯枝图</span>
+<div class="flex justify-between items-center text-secondary font-label-sm text-label-sm mt-1">
+<span>上周</span>
+<span class="font-code-num text-code-num">98K 笔</span>
+</div>
+</div>
+</div>
+<!-- History Item 3 -->
+<div class="border border-outline-variant bg-surface hover:border-on-surface transition-colors p-3 flex flex-col gap-2.5 group cursor-pointer">
+<div class="aspect-video w-full bg-surface-container flex items-center justify-center border border-outline-variant overflow-hidden relative">
+<div class="w-full h-full p-2 flex items-center justify-center text-secondary opacity-80 group-hover:opacity-100 transition-opacity">
+<svg class="w-full h-full stroke-on-surface fill-none" stroke-width="0.8" viewbox="0 0 100 60">
+<path d="M15 45 L 30 20 L 70 20 L 85 45 Z" fill="#efe7e1"></path>
+<path d="M25 20 Q 50 10 75 20"></path>
+<line stroke="#8b716d" x1="10" x2="90" y1="45" y2="45"></line>
+</svg>
+</div>
+<span class="absolute bottom-1 right-1 font-label-sm text-[9px] bg-surface text-secondary px-1 border border-outline-variant">SVG</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-md text-title-md text-on-surface group-hover:text-primary transition-colors">老街檐角拓片</span>
+<div class="flex justify-between items-center text-secondary font-label-sm text-label-sm mt-1">
+<span>2 周前</span>
+<span class="font-code-num text-code-num">215K 笔</span>
+</div>
+</div>
+</div>
+<!-- History Item 4 -->
+<div class="border border-outline-variant bg-surface hover:border-on-surface transition-colors p-3 flex flex-col gap-2.5 group cursor-pointer">
+<div class="aspect-video w-full bg-surface-container flex items-center justify-center border border-outline-variant overflow-hidden relative">
+<div class="w-full h-full p-2 flex items-center justify-center text-secondary opacity-80 group-hover:opacity-100 transition-opacity">
+<svg class="w-full h-full stroke-on-surface fill-none" stroke-width="0.8" viewbox="0 0 100 60">
+<ellipse cx="50" cy="38" fill="#ebe1d7" rx="22" ry="14" stroke="#1e1b18" stroke-width="0.8"></ellipse>
+<ellipse cx="50" cy="24" rx="14" ry="4" stroke="#872316" stroke-width="0.6"></ellipse>
+</svg>
+</div>
+<span class="absolute bottom-1 right-1 font-label-sm text-[9px] bg-surface text-secondary px-1 border border-outline-variant">SVG</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-md text-title-md text-on-surface group-hover:text-primary transition-colors">陶罐素描矢量化</span>
+<div class="flex justify-between items-center text-secondary font-label-sm text-label-sm mt-1">
+<span>1 个月前</span>
+<span class="font-code-num text-code-num">83K 笔</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- ================= FOOTER (Shared Components Alignment) ================= -->
+<footer class="bg-surface-container-low dark:bg-inverse-surface border-t border-outline-variant dark:border-outline mt-auto">
+<div class="flex flex-col md:flex-row justify-between items-center w-full px-space-lg py-space-md max-w-screen-2xl mx-auto gap-4">
+<!-- Brand & Copyright Inscription -->
+<div class="flex flex-col sm:flex-row items-center gap-2 text-center sm:text-left">
+<span class="font-title-md text-title-md text-on-surface dark:text-inverse-on-surface font-semibold">
+          图片转 SVG 刻印局
+        </span>
+<span class="hidden sm:inline text-outline-variant">·</span>
+<span class="font-body-sm text-body-sm text-secondary dark:text-secondary-fixed-dim">
+          © 2024 图片转 SVG 刻印局 · 数字化金石拓印与矢构档案
+        </span>
+</div>
+<!-- Legal & Reference Links -->
+<div class="flex items-center space-x-6 text-label-sm font-label-sm">
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-on-surface dark:hover:text-inverse-on-surface transition-colors" href="#">
+          石刻规约
+        </a>
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-on-surface dark:hover:text-inverse-on-surface transition-colors" href="#">
+          矢量体例
+        </a>
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-on-surface dark:hover:text-inverse-on-surface transition-colors" href="#">
+          古籍印谱
+        </a>
+<a class="text-secondary dark:text-secondary-fixed-dim hover:text-on-surface dark:hover:text-inverse-on-surface transition-colors" href="#">
+          更新日志
+        </a>
+</div>
+</div>
+</footer>
+</body></html>

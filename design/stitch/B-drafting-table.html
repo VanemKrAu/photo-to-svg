@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full bg-[#F7F7F5]">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>图片转 SVG - 绘图台</title>
+  <!-- Fonts: Clean neutral sans + JetBrains Mono for numbers -->
+  <!-- Material Symbols -->
+  <!-- Tailwind CSS -->
+  <script src="vendor/tailwind.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            paper: '#F7F7F5',
+            'graphite-main': '#1A1C1E',
+            'graphite-muted': '#686B6E',
+            'hairline': '#E2E2DF',
+            'hairline-subtle': '#EDEDEA',
+            'hairline-dark': '#C8C8C4',
+            'ink-blue': '#2B4A6F',
+            'ink-blue-hover': '#213854',
+            'status-green': '#3B7D54'
+          },
+          fontFamily: {
+            sans: ['Segoe UI', '-apple-system', 'BlinkMacSystemFont', '"PingFang SC"', '"Hiragino Sans GB"', '"Microsoft YaHei"', 'sans-serif'],
+            mono: ['"Consolas","Courier New"', 'ui-monospace', 'monospace']
+          },
+          borderRadius: {
+            DEFAULT: '2px',
+            'none': '0px'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+    /* Subtle CAD / blueprint drafting grid */
+    .drafting-grid {
+      background-size: 24px 24px;
+      background-image:
+        linear-gradient(to right, rgba(226, 226, 223, 0.5) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(226, 226, 223, 0.5) 1px, transparent 1px);
+    }
+  </style>
+</head>
+<body class="min-h-full flex flex-col font-sans text-graphite-main bg-paper antialiased selection:bg-ink-blue selection:text-white">
+
+  <!-- HEADER (thin, one line, no giant hero) -->
+  <header class="h-12 border-b border-hairline bg-white px-6 flex items-center justify-between sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 bg-ink-blue rounded-[1px]"></span>
+        <h1 class="text-[15px] font-semibold tracking-tight text-graphite-main">图片转 SVG</h1>
+      </div>
+      <div class="h-3.5 w-px bg-hairline"></div>
+      <p class="text-[13px] text-graphite-muted">把照片变成矢量 SVG，并回放整个作画过程 · 全部在你的浏览器里完成，图片不上传</p>
+    </div>
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-1.5 px-2 py-0.5 border border-hairline bg-paper text-[11px] font-mono text-graphite-muted">
+        <span class="w-1.5 h-1.5 rounded-full bg-status-green"></span>
+        <span>WASM · OPENCV 引擎就绪</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN DRAFTING AREA -->
+  <main class="flex-1 max-w-[1720px] w-full mx-auto p-6 flex flex-col gap-6">
+
+    <!-- TOP WORKSPACE: Left Column Controls + Right Column Artwork Stage -->
+    <div class="flex flex-col lg:flex-row gap-6 items-start">
+
+      <!-- LEFT COLUMN: Narrow (roughly 360-400px), pure technical panel -->
+      <aside class="w-full lg:w-[380px] shrink-0 bg-white border border-hairline p-5 flex flex-col gap-5">
+
+        <!-- 1. Image picker: portrait photo thumbnail + dashed drop target -->
+        <div class="flex flex-col gap-2.5">
+          <div class="text-[13px] font-medium text-graphite-main">图片输入</div>
+          
+          <!-- Selected image preview: dim corridor portrait with warm rim light -->
+          <div class="flex items-center gap-3 p-2.5 bg-paper border border-hairline rounded-[2px]">
+            <div class="w-14 h-14 bg-graphite-main border border-hairline overflow-hidden shrink-0 relative rounded-[1px]">
+              <img src="vendor/img/img-9944bfafa5.jpg" alt="已选照片：昏暗走廊人像" class="w-full h-full object-cover"/>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-[13px] font-medium text-graphite-main truncate">portrait_corridor.jpg</div>
+              <div class="text-[11px] font-mono text-graphite-muted mt-0.5">1024 × 1024 · 842 KB</div>
+            </div>
+            <button class="px-2 py-1 text-[11px] border border-hairline bg-white text-graphite-muted hover:text-graphite-main hover:border-hairline-dark transition-colors rounded-[2px]">
+              替换
+            </button>
+          </div>
+
+          <!-- Dashed drop target -->
+          <div class="border border-dashed border-hairline-dark hover:border-ink-blue bg-white p-3 text-center rounded-[2px] cursor-pointer transition-colors group">
+            <div class="flex items-center justify-center gap-2 text-graphite-muted group-hover:text-ink-blue text-[13px]">
+              <span class="material-symbols-outlined text-[18px]">add_photo_alternate</span>
+              <span>点击或拖入图片</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="h-px bg-hairline"></div>
+
+        <!-- 2. Quality selector: four options with honest time estimates -->
+        <div class="flex flex-col gap-2">
+          <div class="text-[13px] font-medium text-graphite-main">描摹质量</div>
+          <div class="border border-hairline divide-y divide-hairline rounded-[2px] bg-white overflow-hidden text-[13px]">
+            <!-- 快速 800 · 约 1 分钟 -->
+            <label class="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-paper transition-colors">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 border border-hairline-dark inline-block rounded-[1px]"></span>
+                <span class="text-graphite-main">快速</span>
+              </div>
+              <div class="text-[12px] font-mono text-graphite-muted">
+                <span>800</span> · 约 1 分钟
+              </div>
+            </label>
+
+            <!-- 标准 1200 · 约 1.5 分钟 (SELECTED) -->
+            <label class="flex items-center justify-between px-3 py-2 cursor-pointer bg-ink-blue text-white transition-colors">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 bg-white inline-block rounded-[1px]"></span>
+                <span class="font-medium text-white">标准</span>
+              </div>
+              <div class="text-[12px] font-mono text-white/90">
+                <span>1200</span> · 约 1.5 分钟
+              </div>
+            </label>
+
+            <!-- 高清 1600 · 约 2.5 分钟 -->
+            <label class="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-paper transition-colors">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 border border-hairline-dark inline-block rounded-[1px]"></span>
+                <span class="text-graphite-main">高清</span>
+              </div>
+              <div class="text-[12px] font-mono text-graphite-muted">
+                <span>1600</span> · 约 2.5 分钟
+              </div>
+            </label>
+
+            <!-- 最高 不缩放 · 最清晰 -->
+            <label class="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-paper transition-colors">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 border border-hairline-dark inline-block rounded-[1px]"></span>
+                <span class="text-graphite-main">最高</span>
+              </div>
+              <div class="text-[12px] text-graphite-muted">
+                不缩放 · 最清晰
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="h-px bg-hairline"></div>
+
+        <!-- 3. Image-type selector: 自动 / 照片 / 插画, "自动" selected -->
+        <div class="flex flex-col gap-2">
+          <div class="text-[13px] font-medium text-graphite-main">图片类型</div>
+          <!-- Technical switch bank -->
+          <div class="grid grid-cols-3 border border-hairline divide-x divide-hairline rounded-[2px] overflow-hidden bg-white text-[13px]">
+            <!-- 自动 (selected) -->
+            <button class="py-1.5 text-center bg-ink-blue text-white font-medium">
+              自动
+            </button>
+            <!-- 照片 -->
+            <button class="py-1.5 text-center text-graphite-muted hover:text-graphite-main hover:bg-paper transition-colors">
+              照片
+            </button>
+            <!-- 插画 -->
+            <button class="py-1.5 text-center text-graphite-muted hover:text-graphite-main hover:bg-paper transition-colors">
+              插画
+            </button>
+          </div>
+          <!-- Small helper line: 小图会被自动放大 2 倍再描摹（轮廓更顺、色块更干净） -->
+          <p class="text-[12px] text-graphite-muted leading-relaxed">
+            小图会被自动放大 2 倍再描摹（轮廓更顺、色块更干净）
+          </p>
+        </div>
+
+        <div class="h-px bg-hairline"></div>
+
+        <!-- 4. Title & Duration Controls -->
+        <div class="flex flex-col gap-3">
+          <div>
+            <label class="block text-[13px] font-medium text-graphite-main mb-1.5">作品标题</label>
+            <input type="text" value="走廊人像" class="w-full h-8 px-2.5 bg-white border border-hairline rounded-[2px] text-[13px] text-graphite-main focus:outline-none focus:border-ink-blue focus:ring-1 focus:ring-ink-blue font-sans"/>
+          </div>
+          <div>
+            <label class="block text-[13px] font-medium text-graphite-main mb-1.5">回放时长 (秒)</label>
+            <div class="relative">
+              <input type="text" value="90" class="w-full h-8 px-2.5 pr-8 bg-white border border-hairline rounded-[2px] text-[13px] font-mono text-graphite-main focus:outline-none focus:border-ink-blue focus:ring-1 focus:ring-ink-blue"/>
+              <span class="absolute right-2.5 top-1.5 text-[12px] font-mono text-graphite-muted">s</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. Primary action button: 开始生成 (Ink Blue) -->
+        <div class="pt-1">
+          <button class="w-full h-9 bg-ink-blue hover:bg-ink-blue-hover text-white text-[14px] font-medium rounded-[2px] border border-ink-blue transition-colors flex items-center justify-center gap-1.5">
+            <span class="material-symbols-outlined text-[16px]">play_arrow</span>
+            <span>开始生成</span>
+          </button>
+        </div>
+
+      </aside>
+
+      <!-- RIGHT COLUMN: Visually dominant, the hero of the page -->
+      <section class="flex-1 w-full bg-white border border-hairline rounded-[2px] flex flex-col min-w-0">
+
+        <!-- Top metadata hairline strip -->
+        <div class="h-9 px-4 border-b border-hairline flex items-center justify-between text-[12px]">
+          <div class="flex items-center gap-3">
+            <span class="font-medium text-graphite-main">矢量绘图画布</span>
+            <span class="text-hairline-dark">|</span>
+            <span class="font-mono text-graphite-muted">1200 × 896 PT</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-status-green"></span>
+            <span class="text-graphite-muted text-[12px]">矢量解析中 · 实时分层渲染</span>
+          </div>
+        </div>
+
+        <!-- The artwork stage: large canvas showing the portrait mid-trace on pure drafting surface -->
+        <div class="relative w-full aspect-[4/3] max-h-[620px] bg-paper drafting-grid p-6 sm:p-10 flex items-center justify-center overflow-hidden border-b border-hairline">
+          
+          <!-- Drafting canvas frame with corner registration ticks (+) -->
+          <div class="relative bg-white border border-hairline-dark shadow-none w-full h-full max-w-[800px] flex items-center justify-center">
+            
+            <!-- Corner Registration Ticks (+) -->
+            <span class="absolute -top-3 -left-3 text-graphite-muted font-mono text-[14px] leading-none select-none font-light">+</span>
+            <span class="absolute -top-3 -right-3 text-graphite-muted font-mono text-[14px] leading-none select-none font-light">+</span>
+            <span class="absolute -bottom-3 -left-3 text-graphite-muted font-mono text-[14px] leading-none select-none font-light">+</span>
+            <span class="absolute -bottom-3 -right-3 text-graphite-muted font-mono text-[14px] leading-none select-none font-light">+</span>
+
+            <!-- Dimension labels on edges -->
+            <div class="absolute top-1 left-2 text-[10px] font-mono text-graphite-muted/80">
+              LAYER #24 · PATH: POLYGON_TRACED
+            </div>
+            <div class="absolute bottom-1 right-2 text-[10px] font-mono text-graphite-muted/80">
+              ORIGIN [0, 0] · BEZIER ACTIVE
+            </div>
+
+            <!-- Clean vector art mid-trace artwork: figure blocked in flat colour shapes, empty technical wireframe corridor -->
+            <div class="w-full h-full p-2 flex items-center justify-center overflow-hidden">
+              <img src="vendor/img/img-4faa365c03.jpg" alt="人像中途描摹矢量作品展示" class="w-full h-full object-contain pointer-events-none"/>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Replay bar underneath: play/pause, scrub timeline, time readout, speed control, zoom controls, status line -->
+        <div class="p-4 bg-white flex flex-col gap-3">
+          
+          <div class="flex items-center gap-3 sm:gap-4 flex-wrap">
+            <!-- Play/pause button -->
+            <button class="w-8 h-8 bg-ink-blue hover:bg-ink-blue-hover text-white flex items-center justify-center rounded-[2px] transition-colors shrink-0" title="暂停/继续回放">
+              <span class="material-symbols-outlined text-[18px]">pause</span>
+            </button>
+
+            <!-- Scrub timeline -->
+            <div class="flex-1 min-w-[140px] flex flex-col justify-center relative cursor-pointer group py-1.5">
+              <div class="w-full h-1 bg-paper border border-hairline rounded-none overflow-hidden relative">
+                <!-- Buffer / cached track -->
+                <div class="absolute top-0 left-0 h-full bg-hairline-dark w-[85%]"></div>
+                <!-- Played track in ink blue (46.6%) -->
+                <div class="absolute top-0 left-0 h-full bg-ink-blue w-[46.6%]"></div>
+              </div>
+              <!-- Playhead needle (2px near-square) -->
+              <div class="absolute left-[46.6%] top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-3.5 bg-white border border-ink-blue rounded-[1px] pointer-events-none"></div>
+            </div>
+
+            <!-- Time readout like 00:42 / 01:30 in monospace -->
+            <div class="text-[12px] font-mono text-graphite-main shrink-0 px-2 py-1 bg-paper border border-hairline rounded-[2px]">
+              00:42 <span class="text-graphite-muted">/ 01:30</span>
+            </div>
+
+            <!-- Speed control 0.5x 1x 2x 4x (technical switch bank) -->
+            <div class="flex items-center border border-hairline divide-x divide-hairline rounded-[2px] overflow-hidden shrink-0 bg-white text-[12px] font-mono">
+              <button class="px-2 py-1 text-graphite-muted hover:text-graphite-main hover:bg-paper transition-colors">0.5x</button>
+              <button class="px-2 py-1 bg-ink-blue text-white font-medium">1x</button>
+              <button class="px-2 py-1 text-graphite-muted hover:text-graphite-main hover:bg-paper transition-colors">2x</button>
+              <button class="px-2 py-1 text-graphite-muted hover:text-graphite-main hover:bg-paper transition-colors">4x</button>
+            </div>
+
+            <!-- Zoom controls - + 1:1 -->
+            <div class="flex items-center border border-hairline divide-x divide-hairline rounded-[2px] overflow-hidden shrink-0 bg-white text-[12px] font-mono">
+              <button class="w-7 h-7 flex items-center justify-center text-graphite-muted hover:text-graphite-main hover:bg-paper transition-colors" title="缩小">-</button>
+              <button class="w-7 h-7 flex items-center justify-center text-graphite-muted hover:text-graphite-main hover:bg-paper transition-colors" title="放大">+</button>
+              <button class="px-2 h-7 flex items-center justify-center text-graphite-muted hover:text-graphite-main hover:bg-paper transition-colors">1:1</button>
+            </div>
+
+            <!-- Action: Export SVG -->
+            <button class="px-3 h-7 bg-white border border-hairline hover:border-hairline-dark text-graphite-main text-[12px] font-medium rounded-[2px] flex items-center gap-1 transition-colors">
+              <span class="material-symbols-outlined text-[15px]">file_download</span>
+              <span>导出 SVG</span>
+            </button>
+          </div>
+
+          <!-- Small honest status line: 已绘制 128,430 / 172,471 笔 -->
+          <div class="flex items-center justify-between pt-2 border-t border-hairline text-[12px]">
+            <div class="flex items-center gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-status-green"></span>
+              <span class="text-graphite-main">
+                已绘制 <span class="font-mono font-medium text-ink-blue">128,430</span> / <span class="font-mono text-graphite-muted">172,471</span> 笔
+              </span>
+            </div>
+            <div class="text-[12px] font-mono text-graphite-muted">
+              进度 <span class="text-graphite-main font-medium">74.5%</span> · 算法迭代：第 14 轮
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+    </div>
+
+    <!-- BOTTOM STRIP: 生成历史 - a horizontal row of four small thumbnails of earlier SVGs -->
+    <section class="bg-white border border-hairline rounded-[2px] p-5">
+      <div class="flex items-center justify-between mb-3.5">
+        <h2 class="text-[14px] font-semibold text-graphite-main">生成历史</h2>
+        <span class="text-[12px] font-mono text-graphite-muted">共 4 条记录</span>
+      </div>
+
+      <!-- Horizontal row of four small thumbnails of earlier SVGs -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+
+        <!-- Card 1: 雨中街景 (3 天前) -->
+        <div class="p-2.5 bg-paper border border-hairline hover:border-hairline-dark rounded-[2px] flex items-center gap-3 transition-colors cursor-pointer group">
+          <div class="w-14 h-14 bg-white border border-hairline rounded-[1px] overflow-hidden shrink-0">
+            <img src="vendor/img/img-f528730621.jpg" alt="雨中街景" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"/>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-[13px] font-medium text-graphite-main truncate group-hover:text-ink-blue transition-colors">雨中街景</div>
+            <div class="text-[11px] font-mono text-graphite-muted mt-0.5">3 天前</div>
+            <div class="text-[11px] font-mono text-graphite-muted">1,240 路径</div>
+          </div>
+        </div>
+
+        <!-- Card 2: 木工匠人 (5 天前) -->
+        <div class="p-2.5 bg-paper border border-hairline hover:border-hairline-dark rounded-[2px] flex items-center gap-3 transition-colors cursor-pointer group">
+          <div class="w-14 h-14 bg-white border border-hairline rounded-[1px] overflow-hidden shrink-0">
+            <img src="vendor/img/img-88026dc74a.jpg" alt="木工匠人" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"/>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-[13px] font-medium text-graphite-main truncate group-hover:text-ink-blue transition-colors">木工匠人</div>
+            <div class="text-[11px] font-mono text-graphite-muted mt-0.5">5 天前</div>
+            <div class="text-[11px] font-mono text-graphite-muted">3,420 路径</div>
+          </div>
+        </div>
+
+        <!-- Card 3: 窗台橘猫 (上周) -->
+        <div class="p-2.5 bg-paper border border-hairline hover:border-hairline-dark rounded-[2px] flex items-center gap-3 transition-colors cursor-pointer group">
+          <div class="w-14 h-14 bg-white border border-hairline rounded-[1px] overflow-hidden shrink-0">
+            <img src="vendor/img/img-5c6b95444a.jpg" alt="窗台橘猫" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"/>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-[13px] font-medium text-graphite-main truncate group-hover:text-ink-blue transition-colors">窗台橘猫</div>
+            <div class="text-[11px] font-mono text-graphite-muted mt-0.5">上周</div>
+            <div class="text-[11px] font-mono text-graphite-muted">860 路径</div>
+          </div>
+        </div>
+
+        <!-- Card 4: 一期一会茶室 (2 周前) -->
+        <div class="p-2.5 bg-paper border border-hairline hover:border-hairline-dark rounded-[2px] flex items-center gap-3 transition-colors cursor-pointer group">
+          <div class="w-14 h-14 bg-white border border-hairline rounded-[1px] overflow-hidden shrink-0">
+            <img src="vendor/img/img-772679f2d0.jpg" alt="一期一会茶室" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"/>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-[13px] font-medium text-graphite-main truncate group-hover:text-ink-blue transition-colors">一期一会茶室</div>
+            <div class="text-[11px] font-mono text-graphite-muted mt-0.5">2 周前</div>
+            <div class="text-[11px] font-mono text-graphite-muted">2,890 路径</div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Technical Hairline Footer -->
+  <footer class="border-t border-hairline bg-white px-6 py-2.5 text-center flex flex-col sm:flex-row justify-between items-center text-graphite-muted text-[11px] font-mono">
+    <div>
+      本地运行 · CPython + OpenCV 编译至 WebAssembly · 图片不离开本地设备
+    </div>
+    <div class="flex items-center gap-4 mt-1 sm:mt-0">
+      <span>LATENCY: 12MS</span>
+      <span>RENDERER: VECTOR-2D-CANVAS</span>
+    </div>
+  </footer>
+
+</body>
+</html>

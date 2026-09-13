@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>图片转 SVG · Stitch 设计方案对照</title>
+<style>
+:root{
+  --bg:#0F0F12; --panel:#17171C; --hair:#2A2A31; --hair-2:#3A3A43;
+  --text:#ECECEF; --text-2:#A6A6AE; --text-3:#7C7C85;
+  --sans:"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei","Segoe UI",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:400 15px/1.65 var(--sans);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:44px 28px 72px}
+h1{margin:0 0 12px;font-size:27px;font-weight:600}
+.lede{color:var(--text-2);font-size:14.5px;margin:0 0 10px;max-width:76ch}
+.lede b{color:var(--text);font-weight:500}
+code{font:400 12.5px var(--mono);color:#9BB4CC;
+  background:#1C1C22;padding:1px 6px;border-radius:3px}
+.rule{height:1px;background:var(--hair);margin:30px 0}
+h2{font-size:12.5px;font-weight:500;color:var(--text-3);letter-spacing:.1em;
+  text-transform:uppercase;margin:0 0 16px}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:22px}
+.card{background:var(--panel);border:1px solid var(--hair);border-radius:6px;
+  overflow:hidden;display:flex;flex-direction:column;
+  transition:border-color .15s,transform .15s}
+.card:hover{border-color:var(--hair-2);transform:translateY(-2px)}
+.card .shot{display:block;background:#000;border-bottom:1px solid var(--hair);
+  aspect-ratio:16/10;overflow:hidden}
+.card .shot img{width:100%;height:100%;object-fit:cover;object-position:top center;display:block}
+.card .swatch{display:flex;height:34px;border-bottom:1px solid var(--hair)}
+.card .swatch i{flex:1}
+.card .body{padding:17px 18px 20px;display:flex;flex-direction:column;gap:11px;flex:1}
+.card .n{font:400 11.5px var(--mono);color:var(--text-3);letter-spacing:.1em}
+.card h3{margin:0;font-size:19px;font-weight:600}
+.card .en{font:400 12.5px var(--mono);color:var(--text-3);margin-top:-9px}
+.card p{margin:0;font-size:13.5px;color:var(--text-2);line-height:1.65}
+.card dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:12.5px}
+.card dt{color:var(--text-3);font-family:var(--mono);white-space:nowrap}
+.card dd{margin:0;color:var(--text-2)}
+.card .go{margin-top:auto;display:inline-flex;align-items:center;gap:8px;
+  padding:10px 16px;border:1px solid var(--hair-2);border-radius:5px;
+  color:var(--text);text-decoration:none;font-size:13.5px;font-weight:500;
+  align-self:flex-start;transition:background .15s,border-color .15s}
+.card .go:hover{background:#22222A;border-color:#4A4A55}
+
+.note{background:var(--panel);border:1px solid var(--hair);
+  border-left:3px solid #4A6B8A;border-radius:5px;
+  padding:16px 19px;font-size:13.5px;color:var(--text-2);line-height:1.75}
+.note b{color:var(--text);font-weight:600}
+.note + .note{margin-top:12px}
+.note.warn{border-left-color:#A8763A}
+footer{margin-top:36px;color:var(--text-3);font-size:12.5px;
+  border-top:1px solid var(--hair);padding-top:18px;line-height:1.8}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>图片转 SVG · Stitch 设计方案</h1>
+  <p class="lede">
+    四份都是 <b>Google Stitch 生成的真实网页代码</b>（完整 HTML + Tailwind），
+    不是图片。同一套控件、同一份文案、同一个画面，只有设计语言不同。
+    点「打开」看可交互的原稿。
+  </p>
+  <p class="lede">
+    四个方向的底色 / 强调色 / 字体来自我在 Stitch 里建的设计系统，
+    取自项目自己的 <code>PRODUCT.md</code>（含它列出的反参考：不要金色奢华风、
+    不要 01/02/03 编号、accent 不做背景）。
+  </p>
+
+  <div class="rule"></div>
+
+  <h2>四个方向</h2>
+  <div class="grid">
+
+    <div class="card">
+      <a class="shot" href="stitch/A-darkroom.html"><img src="stitch/preview/darkroom.png" alt="暗房 方案预览"></a>
+      <div class="swatch">
+        <i style="background:#0E0D0C"></i><i style="background:#161412"></i>
+        <i style="background:#2D2926"></i><i style="background:#EDE8E3"></i>
+        <i style="background:#E2603F"></i>
+      </div>
+      <div class="body">
+        <span class="n">方向 A</span>
+        <h3>暗房</h3>
+        <span class="en">Darkroom</span>
+        <p>暖近黑工作台，余烬橙只落在「开始生成」和进度上。
+          衬线标题 + 等宽数字。画布角落带贝塞尔坐标读数
+          （<code>X: 442.0 Y: 388.5 · 贝塞尔闭合环路</code>），
+          顶部实时显示 <code>已绘制 128,430 / 172,471 笔 (74.5%)</code>。</p>
+        <dl>
+          <dt>底色</dt><dd>暖近黑 #0E0D0C</dd>
+          <dt>强调色</dt><dd>余烬橙 #E2603F</dd>
+          <dt>字体</dt><dd>Noto Serif SC + JetBrains Mono</dd>
+          <dt>气质</dt><dd>安静、温暖、手作感</dd>
+        </dl>
+        <a class="go" href="stitch/A-darkroom.html">打开 →</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <a class="shot" href="stitch/B-drafting-table.html"><img src="stitch/preview/drafting-table.png" alt="绘图台 方案预览"></a>
+      <div class="swatch">
+        <i style="background:#F7F7F5"></i><i style="background:#FFFFFF"></i>
+        <i style="background:#DDDCD6"></i><i style="background:#1A1A18"></i>
+        <i style="background:#2B4A6F"></i>
+      </div>
+      <div class="body">
+        <span class="n">方向 B</span>
+        <h3>绘图台</h3>
+        <span class="en">Drafting Table</span>
+        <p>工程图纸语言：纸白底、发丝规则线、全站等宽数字。
+          画布上标 <code>LAYER #24 · PATH: POLYGON_TRACED</code>、
+          <code>ORIGIN [0,0] · BEZIER ACTIVE</code>，
+          底栏 <code>进度 74.5% · 算法迭代：第 14 轮</code>，
+          带「导出 SVG」。页脚 <code>LATENCY: 12MS / RENDERER: VECTOR-2D-CANVAS</code>。</p>
+        <dl>
+          <dt>底色</dt><dd>纸白 #F7F7F5</dd>
+          <dt>强调色</dt><dd>墨蓝 #2B4A6F</dd>
+          <dt>字体</dt><dd>无衬线 + JetBrains Mono</dd>
+          <dt>气质</dt><dd>精确、克制、技术</dd>
+        </dl>
+        <a class="go" href="stitch/B-drafting-table.html">打开 →</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <a class="shot" href="stitch/C-ink-rubbing.html"><img src="stitch/preview/ink-rubbing.png" alt="拓印 方案预览"></a>
+      <div class="swatch">
+        <i style="background:#FFF8F4"></i><i style="background:#F0E4DA"></i>
+        <i style="background:#C9B8A8"></i><i style="background:#1A1714"></i>
+        <i style="background:#A83A2B"></i>
+      </div>
+      <div class="body">
+        <span class="n">方向 C</span>
+        <h3>拓印</h3>
+        <span class="en">Ink Rubbing</span>
+        <p>金石拓印语言：宣纸底、墨色、朱砂只用在一处主按钮。
+          中文排印讲究——「印版参数与输入」「原片样本」「印稿题名」
+          「图版一 · 矢量轮廓分色着墨阶段」，配竖排印章与
+          <code>层级: 4 / 7 · 贝塞尔闭合路径</code>。导航为「刻印工坊 / 拓本档案 / 字法参考」。</p>
+        <dl>
+          <dt>底色</dt><dd>宣纸 #FFF8F4</dd>
+          <dt>强调色</dt><dd>朱砂 #A83A2B</dd>
+          <dt>字体</dt><dd>衬线为主（含正文）</dd>
+          <dt>气质</dt><dd>编辑、文化、从容</dd>
+        </dl>
+        <a class="go" href="stitch/C-ink-rubbing.html">打开 →</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <a class="shot" href="stitch/D-viewfinder.html"><img src="stitch/preview/viewfinder.png" alt="取景器 方案预览"></a>
+      <div class="swatch">
+        <i style="background:#131316"></i><i style="background:#1A1A1E"></i>
+        <i style="background:#2A2A2F"></i><i style="background:#A8A8AE"></i>
+        <i style="background:#F2F2F0"></i>
+      </div>
+      <div class="body">
+        <span class="n">方向 D</span>
+        <h3>取景器</h3>
+        <span class="en">Viewfinder</span>
+        <p>相机取景器语言，界面上<b>没有任何彩色强调色</b>——
+          主按钮是近白，颜色全留给画面。带十字准线、
+          顶部 <code>VIEWFINDER // TRACE_PASS_02 | ISO 100 · F/2.8 · 1/120s</code>、
+          底部 <code>LOC [44.8219° N, 0.3541° W] · FRAME 0847</code>。
+          画面用四角括号框住，不用卡片。</p>
+        <dl>
+          <dt>底色</dt><dd>冷石墨 #131316</dd>
+          <dt>强调色</dt><dd>无（近白 #F2F2F0）</dd>
+          <dt>字体</dt><dd>几何无衬线 + 等宽</dd>
+          <dt>气质</dt><dd>冷静、精密、画面至上</dd>
+        </dl>
+        <a class="go" href="stitch/D-viewfinder.html">打开 →</a>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="rule"></div>
+
+  <div class="note">
+    <b>已做离线化，断网也能直接打开。</b>Stitch 原稿依赖 Tailwind Play CDN、Google Fonts
+    和十几张 Google 托管的画面素材，我把它们全部拉到了本地 <code>stitch/vendor/</code>（共 0.9 MB）：
+    Tailwind 换成本地脚本，画面素材换成本地图片，字体改用系统字体栈
+    （中文衬线 → 宋体 / 思源宋体，等宽 → Consolas）。
+    现在这四份设计稿<b>零外部请求</b>，随便断网都能打开。
+    只动了这一层资源引用，布局、配色、间距与 Stitch 原稿保持一致。
+  </div>
+
+  <div class="note warn">
+    <b>已知偏差，需要你定夺。</b>
+    D（取景器）的画面 Stitch 放的是一张<b>真实照片</b>而不是矢量描摹结果 ——
+    它把「取景器」理解成了照相机取景。概念上说得通，但和产品「位图 → 矢量」的定位有出入，
+    要么改提示词重生成，要么保留这个隐喻。
+    A / B / C 三份的画面都是矢量插画，方向是对的。
+  </div>
+
+  <div class="note">
+    <b>怎么选。</b>
+    A 和 D 是暗色、B 和 C 是亮色；A / C 偏暖，B / D 偏冷。
+    按 <code>PRODUCT.md</code> 的用户画像（晚上、室内、桌面前），A 或 D 更贴；
+    想截图分享或白天用着清爽，B 或 C 更稳。
+    定下来之后我再往 <code>web/index.html</code> 里落实现 —— 原稿是 Tailwind CDN 的形式，
+    真上线需要换成项目现有的零依赖写法（项目 README 明确要求不加载任何框架和 CDN）。
+  </div>
+
+  <footer>
+    设计稿：<code>design/stitch/A-darkroom.html</code>、<code>B-drafting-table.html</code>、
+    <code>C-ink-rubbing.html</code>、<code>D-viewfinder.html</code>（Stitch 原始输出，未改动）。<br>
+    预览图：<code>design/stitch/preview/</code>。配图素材：<code>design/stitch/asset-*.png</code>。<br>
+    我之前手写的四份 HTML 已移到 <code>design/_superseded/</code>，要删直接说。
+  </footer>
+
+</div>
+</body>
+</html>

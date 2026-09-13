@@ -23,3 +23,10 @@ Thumbs.db
 .vscode/
 *~
 *.swp
+
+# Agent 临时产物（截图、中间文件、报告）
+.agent_tmp/
+.agent_reports/
+
+# 被否掉的设计过程稿（保留在本地，不进仓库）
+design/_superseded/
