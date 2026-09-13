@@ -475,7 +475,10 @@
       cb(b.dataset.w ?? b.dataset.v);
     });
   }
-  let maxWidth = '800', preprocess = 'auto';
+  /* 初值必须和界面上默认选中的按钮一致（「标准」= 1200）——
+     之前写的是 800，用户看着「标准」已选中、实际却按 800px 跑，
+     出图细节少还没线索（画布尺寸才看得出来） */
+  let maxWidth = '1200', preprocess = 'auto';
   seg('segSize', v => {
     maxWidth = v;
     // 「最高」档才会慢/大，把提示显出来
@@ -561,6 +564,18 @@
   $('openHtml').addEventListener('click', function(e){
     e.preventDefault();
     openPreview(lastHtmlText);
+  });
+
+  /* 预览框里的「全屏」请求（回放页 postMessage 上来的）：
+     结果卡里点 → 打开铺满整屏的预览层；预览层里再点 → 收回。
+     （回放页自己的伪全屏出不了 iframe，铺不满屏幕） */
+  window.addEventListener("message", function(e){
+    if(!e.data || e.data.type !== "art:fullscreen") return;
+    if($('preview').classList.contains('on')){
+      if(e.source === $('pvFrame').contentWindow) closePreview();
+    }else if(e.source === $('frame').contentWindow){
+      openPreview(lastHtmlText);
+    }
   });
 
   /* ---------- 历史（IndexedDB） ----------
@@ -899,6 +914,11 @@ document.getElementById("full").addEventListener("click",toggleFull);`,
    竖图也会被转成横屏。CSS 方案不碰系统接口，所有浏览器行为一致，
    嵌在 iframe 里也能用（不需要 allowfullscreen）。 */
 function toggleFull(){
+  /* 嵌在别人的 iframe 里（网页端的预览框）：把「全屏」请求交给外层 ——
+     自己这点「伪全屏」只能在框内变大，铺不满屏幕。 */
+  if(window.parent && window.parent !== window){
+    try{ window.parent.postMessage({ type: "art:fullscreen" }, "*"); return; }catch(_){}
+  }
   var on = document.body.classList.toggle("fs");
   var b = document.getElementById("full");
   if(b) b.textContent = on ? "⛶ 退出全屏" : "⛶ 全屏";

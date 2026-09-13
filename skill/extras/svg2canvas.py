@@ -637,6 +637,12 @@ frame.addEventListener("pointermove",function(e){
    竖图也会被转成横屏。CSS 方案不碰系统接口，所有浏览器行为一致，
    嵌在 iframe 里也能用（不需要 allowfullscreen）。 */
 function toggleFull(){
+  /* 嵌在别人的 iframe 里（网页端的预览框）：把「全屏」请求交给外层 ——
+     自己这点「伪全屏」只能在框内变大，铺不满屏幕；外层收到后会打开
+     真正的全屏预览层（再点一次则收回）。 */
+  if(window.parent && window.parent !== window){
+    try{ window.parent.postMessage({ type: "art:fullscreen" }, "*"); return; }catch(_){}
+  }
   var on = document.body.classList.toggle("fs");
   var b = document.getElementById("full");
   if(b) b.textContent = on ? "⛶ 退出全屏" : "⛶ 全屏";
