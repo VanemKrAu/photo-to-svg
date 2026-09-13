@@ -922,6 +922,26 @@ document.getElementById("fsExit").addEventListener("click",toggleFull);` },
     return out;
   }
 
+  /* 底板色修复（2026-09-14）：早期回放页把底板写死成浅灰（#f0f0f0），
+     深色图里「与底色相近、被整簇跳过的块」会露成满屏白斑。
+     SVG 头部有权威的底板色（生成时算的 <rect fill="…">），从那里读出来替换。
+     读不到、或 HTML 里找不到那两处写死值，就原样返回（不改）。 */
+  async function fixBaseColor(htmlText, svgBlob){
+    try{
+      if(!svgBlob || !svgBlob.slice) return null;
+      const head = await svgBlob.slice(0, 1048576).text();   // 底板 rect 在文件开头
+      const m = head.match(/<rect width="[\d.]+" height="[\d.]+" fill="(#[0-9a-fA-F]{6})"/);
+      if(!m) return null;
+      const bg = m[1];
+      let hit = 0, out = htmlText;
+      out = out.replace(/(clearAll\(\)\{ ctx\.fillStyle=")#[0-9a-fA-F]{6}(")/,
+                        function(_, a, b){ hit++; return a + bg + b; });
+      out = out.replace(/(canvas\{display:block;width:100%;height:100%;background:)#[0-9a-fA-F]{6}/,
+                        function(_, a){ hit++; return a + bg; });
+      return hit ? out : null;
+    }catch(_){ return null; }
+  }
+
   async function upgradeAxis(rec){
     if(rec._axisDone) return rec.html;      // 本次会话里已经处理过
     let text;
@@ -942,6 +962,9 @@ document.getElementById("fsExit").addEventListener("click",toggleFull);` },
     /* ② 布局升级（2026-09-14）：换成「相册式」缩放（全屏放大铺满整屏、缩放条在底部） */
     const lx = upgradeLayout(out);
     if(lx){ out = lx; changed = true; }
+    /* ③ 底板色修复（2026-09-14）：深色图的底板要和 SVG 里的一致，否则满屏白斑 */
+    const bc = await fixBaseColor(out, rec.svg);
+    if(bc){ out = bc; changed = true; }
     return changed ? new Blob([out], { type: "text/html" }) : rec.html;
   }
 
