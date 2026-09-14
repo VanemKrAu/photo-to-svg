@@ -12,13 +12,16 @@
   3. tools/ 与 skill/extras/ 的同名脚本是否一致（防止两边分叉）
   4. skill/ 是否完整、能否被 agent 识别、上游版权声明是否保留
   5. 文档相对链接、硬编码本机路径、残留缓存
-  6. --render：真跑一遍完整流程并核对产物
+  5c. 关键常量跨文件一致性（PAPER / 默认参数 / 版本戳，防「改一处忘一处」）
+  5d. 历史升级测试（六个黄金样本，需 node）
+  6. --render：真跑一遍完整流程并核对产物 + 质量断言（底板同源 / 白点 / 白线）
 """
 import os
 import re
 import sys
 import glob
 import ast
+import shutil
 import hashlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -205,8 +208,104 @@ def check_web():
         bad("index.html 里没有引用 worker.js")
     else:
         ok("index.html 引用了 worker.js")
+    if "upgrade.js" in idx:
+        if os.path.exists(os.path.join(web, "upgrade.js")):
+            ok("index.html 引用了升级库 upgrade.js")
+        else:
+            bad("index.html 引用了 upgrade.js，但 web/upgrade.js 不存在 —— 历史升级会静默降级")
+    else:
+        bad("index.html 没有引用 upgrade.js（历史作品打开/下载时不再升级）")
     if "pyodide" in src.lower():
         ok("worker.js 用 Pyodide 在浏览器里跑 Python")
+
+
+def check_constants():
+    """关键常量跨文件一致性哨兵。
+
+    同一个事实在多处表达是这个项目的常态（纸白底板 6 处、默认参数 3~4 处、
+    模板版本戳 2 处），「改了一处忘了另一处」踩过不止一次（worker.js 的
+    outline 兜底、PAPER 不同源导致深色图白斑……）。这里跨文件比对，抓漂移。"""
+    print("\n[5c/6] 关键常量一致性")
+    probes = [
+        ("纸白底板", "#f0f0f0", [
+            ("tools/make_art.py", r'PAPER = "(#[0-9a-fA-F]{6})"'),
+            ("web/web_run.py", r'PAPER = "(#[0-9a-fA-F]{6})"'),
+            ("tools/svg2canvas.py", r'else "(#[0-9a-fA-F]{6})"'),
+            ("tools/verify_svg.py", r"--bg', default='(#[0-9a-fA-F]{6})'"),
+            ("tools/build_svg_art.py", r'"--background", default="(#[0-9a-fA-F]{6})"'),
+            ("web/index.html", r"var PAPER = '(#[0-9a-fA-F]{6})'"),
+        ]),
+        ("默认 epsilon", "0.25", [
+            ("tools/make_art.py", r'eps = argv\[5\] if len\(argv\) > 5 else "([\d.]+)"'),
+            ("web/web_run.py", r'cfg\.get\("epsilon", ([\d.]+)\)'),
+            ("web/worker.js", r'epsilon: m\.epsilon \?\? ([\d.]+)'),
+        ]),
+        ("默认线宽", "2.6", [
+            ("tools/make_art.py", r'linew = argv\[6\] if len\(argv\) > 6 else "([\d.]+)"'),
+            ("tools/svg2canvas.py", r'len\(sys\.argv\) > 8 else ([\d.]+)'),
+            ("web/web_run.py", r'cfg\.get\("linewidth", ([\d.]+)\)'),
+            ("web/worker.js", r'linewidth: m\.linewidth \?\? ([\d.]+)'),
+        ]),
+        ("默认时长", "90", [
+            ("tools/make_art.py", r'dur = argv\[3\] if len\(argv\) > 3 else "(\d+)"'),
+            ("web/web_run.py", r'cfg\.get\("duration", (\d+)\)'),
+            ("web/worker.js", r'duration: m\.duration \|\| (\d+)'),
+            ("web/index.html", r'id="duration"[^>]*value="(\d+)"'),
+        ]),
+        ("线稿时间占比默认 0（不单独控制）", "0", [
+            ("tools/make_art.py", r'outl = argv\[4\] if len\(argv\) > 4 else "(\d+)"'),
+            ("web/web_run.py", r'cfg\.get\("outline", (\d+)\)'),
+            ("web/worker.js", r'outline: m\.outline \?\? (\d+)'),
+        ]),
+        ("回放页模板戳 = upgrade.js 的 GEN_LATEST", None, [
+            ("tools/svg2canvas.py", r"<!-- p2sv-gen: v(\d+) -->"),
+            ("web/upgrade.js", r"var GEN_LATEST = (\d+);"),
+        ]),
+    ]
+    for desc, expect, items in probes:
+        vals = []
+        for rel, pat in items:
+            path = os.path.join(ROOT, rel)
+            if not os.path.exists(path):
+                bad("%s：找不到 %s" % (desc, rel))
+                continue
+            m = re.search(pat, open(path, encoding="utf-8").read())
+            if not m:
+                bad("%s：%s 里提取不到（代码改了正则要跟着改）" % (desc, rel))
+                continue
+            vals.append((rel, m.group(1)))
+        if not vals:
+            continue
+        got = {v for _, v in vals}
+        if len(got) == 1:
+            ok("%s 一致（%s，%d 处）" % (desc, vals[0][1], len(vals)))
+        else:
+            bad("%s 不一致：%s" % (desc, "；".join("%s=%s" % t for t in vals)))
+
+
+def check_upgrade():
+    """历史回放页升级的黄金样本测试（逻辑断言，需 node）。"""
+    print("\n[5d/6] 历史升级测试（黄金样本）")
+    js = os.path.join(ROOT, "tools", "test_upgrade.js")
+    fix = os.path.join(ROOT, "tests", "fixtures")
+    if not os.path.exists(js):
+        bad("缺 tools/test_upgrade.js")
+        return
+    samples = glob.glob(os.path.join(fix, "*.html"))
+    if not samples:
+        bad("tests/fixtures 没有样本 —— 跑 python3 tools/make_upgrade_fixtures.py")
+        return
+    node = shutil.which("node")
+    if not node:
+        warn("本机没有 node，跳过升级测试（%d 个样本待测）" % len(samples))
+        return
+    import subprocess
+    r = subprocess.run([node, js], capture_output=True, text=True, cwd=ROOT)
+    if r.returncode == 0:
+        ok("升级测试通过（%d 个样本：版本戳 / 幂等 / 防重复 / 迁移链）" % len(samples))
+    else:
+        tail = "\n".join((r.stdout or r.stderr or "").strip().splitlines()[-8:])
+        bad("升级测试失败：\n%s" % tail)
 
 
 def check_docs():
@@ -278,12 +377,72 @@ def check_render():
             ok("实跑成功，产出 %d 个文件" % len(produced))
         else:
             bad("实跑产物不全（只有 %d 个）" % len(produced))
+            return
+        check_quality(os.path.join(tmp, "smoke"))
+
+
+def check_quality(outdir):
+    """对 render 产物做质量断言 —— 把踩坑记录里的坑变成会报警的检查：
+    · 底板同源（#20：SVG 底板 == 回放页两处底板，不同源会满屏白斑）
+    · 白点（#2：深色区露底色的小亮斑）
+    · 白线（#7：扫描线切分不重叠，整行宽的白线）
+    渲染用 rsvg-convert；没装就跳过（只报未跑，不算失败）。"""
+    import subprocess
+    import numpy as np
+    import cv2
+    svgs = glob.glob(os.path.join(outdir, "*.svg"))
+    htmls = glob.glob(os.path.join(outdir, "*.html"))
+    if not svgs or not htmls:
+        warn("找不到产物，跳过质量断言")
+        return
+    # ① 底板同源
+    head = open(svgs[0], encoding="utf-8").read(1 << 20)
+    m = re.search(r'<rect width="[\d.]+" height="[\d.]+" fill="(#[0-9a-fA-F]{6})"', head)
+    h = open(htmls[0], encoding="utf-8").read(8 << 20)
+    m1 = re.search(r'clearAll\(\)\{ ctx\.fillStyle="(#[0-9a-fA-F]{6})"', h)
+    m2 = re.search(r'canvas\{display:block;[^}]*background:(#[0-9a-fA-F]{6})', h)
+    vals = [m and m.group(1), m1 and m1.group(1), m2 and m2.group(1)]
+    if None in vals:
+        bad("底板同源：提取失败（%s）" % vals)
+    elif len(set(vals)) == 1 and vals[0] == "#f0f0f0":
+        ok("底板同源（SVG 与回放页两处都是 %s）" % vals[0])
+    else:
+        bad("底板不同源：%s —— 深色图会满屏白斑（踩坑 #20）" % vals)
+    # ② / ③ 渲染级
+    if not shutil.which("rsvg-convert"):
+        warn("没有 rsvg-convert，跳过白点/白线渲染检查")
+        return
+    png = os.path.join(outdir, "_render_check.png")
+    try:
+        subprocess.run(["rsvg-convert", "-w", "720", svgs[0], "-o", png],
+                       check=True, capture_output=True, timeout=300)
+    except Exception as e:
+        warn("rsvg 渲染失败，跳过白点/白线检查（%s）" % e)
+        return
+    from PIL import Image
+    a = np.array(Image.open(png).convert("L")).astype(np.float32)
+    # 白点：亮像素(>238) 且 5×5 邻域均值很暗(<190) → 孤立亮斑
+    bright = a > 238
+    nb = cv2.blur(a, (5, 5))
+    ratio = float((bright & (nb < 190)).sum()) / a.size
+    if ratio < 0.0002:                       # 基线实测 0.0000%，阈值 0.02%
+        ok("白点检查：孤立亮斑 %.4f%%（阈值 0.02%%）" % (100 * ratio))
+    else:
+        bad("白点检查：孤立亮斑 %.4f%% 超阈值 —— 踩坑 #2 复发？" % (100 * ratio))
+    # 白线：整行宽度的近白行
+    rows = (a > 244).mean(axis=1)
+    n_rows = int((rows > 0.85).sum())
+    if n_rows <= 8:                          # 基线 0 行；修复前成片
+        ok("白线检查：异常白行 %d（阈值 8）" % n_rows)
+    else:
+        bad("白线检查：异常白行 %d 超阈值 —— 踩坑 #7 复发？" % n_rows)
 
 
 def main():
     print("photo-to-svg 自检 —— %s" % ROOT)
     check_deps(); check_syntax(); check_no_drift(); check_skill()
-    check_installed_skill(); check_web(); check_docs()
+    check_installed_skill(); check_web(); check_constants(); check_upgrade()
+    check_docs()
     if "--render" in sys.argv:
         check_render()
     else:
