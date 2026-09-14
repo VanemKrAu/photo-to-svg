@@ -11,8 +11,8 @@
   - 舞台显示刚选中的照片，HUD / 引擎徽标 / 缓存文案全部落在就绪态
 
 用法：
-  python3 tools/shot_web.py web/index.html examples/screenshot-web-pc-v3.png
-  python3 tools/shot_web.py                                # 全部用默认值（1440×1080）
+  python3 tools/shot_web.py web/index.html examples/screenshot-web-pc-v4.png
+  python3 tools/shot_web.py                                # 全部用默认值（1440×1080 @2x → 2880×2160）
   python3 tools/shot_web.py web/index.html /tmp/x.png --no-history
 
 为什么要单独写个脚本：
@@ -282,7 +282,7 @@ async def run(args):
         async with async_playwright() as p:
             browser = await p.chromium.launch(args=["--no-sandbox", "--disable-dev-shm-usage"])
             ctx = await browser.new_context(viewport={"width": args.width, "height": args.height},
-                                            device_scale_factor=1)
+                                            device_scale_factor=args.dpr)
             page = await ctx.new_page()
             await page.goto(f"http://127.0.0.1:{port}/index.html", wait_until="load")
             await page.wait_for_timeout(300)
@@ -328,9 +328,10 @@ async def run(args):
 def main():
     ap = argparse.ArgumentParser(description="给 web/ 界面拍 README 截图")
     ap.add_argument("html", nargs="?", default="web/index.html", help="界面文件")
-    ap.add_argument("out", nargs="?", default="examples/screenshot-web-pc-v3.png", help="输出 PNG")
+    ap.add_argument("out", nargs="?", default="examples/screenshot-web-pc-v4.png", help="输出 PNG")
     ap.add_argument("--width", type=int, default=1440, help="视口宽（默认 1440，即 PC 两栏布局）")
     ap.add_argument("--height", type=int, default=1080, help="视口高（900 时左栏要滚动，底部「运行时已缓存」那行会被藏住，所以取 1080）")
+    ap.add_argument("--dpr", type=float, default=2, help="device_scale_factor：2 = 双倍像素（README 在 Retina 屏/手机上不糊），输出 2880×2160")
     ap.add_argument("--ref", default="", help="参考照片（默认 examples/example-photo-vs-svg.jpg）")
     ap.add_argument("--no-history", action="store_true", help="历史区留空，不塞示例记录")
     args = ap.parse_args()

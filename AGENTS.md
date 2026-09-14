@@ -30,7 +30,7 @@
   网页版下次部署就跟着变（`web_run.py` 也是直接 import 那两个脚本）
 - `smoke_test.py` 会检查 worker.js 声明的文件清单与实际发布内容是否一致
 - 改过界面后更新 README 那张截图：`python3 tools/shot_web.py`（需要 playwright，默认
-  1440×1080 整页，输出 `examples/screenshot-web-pc-v3.png`）。它拍的是「第二次打开、刚
+  1440×1080 视口 @2x → 输出 2880×2160 整页，Retina/手机上看不糊，输出 `examples/screenshot-web-pc-v4.png`）。它拍的是「第二次打开、刚
   拖入一张照片」的真实状态：临时起一个 Pages 同构站点（`worker.js` 换成只回报
   ready + 已缓存的替身，免得真下载 21 MB Pyodide），照片从 `examples/example-photo-vs-svg.jpg`
   左半裁出、经页面的文件输入框真的「选」进去，历史区塞 3 条示例记录（缩略图 = 各自作品原图缩到 128px、内联在脚本里；`--no-history` 可关）。

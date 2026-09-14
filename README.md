@@ -12,7 +12,7 @@
 
 拖一张图进去就出 SVG 和回放网页 · 无需安装 · **图片不上传**（全在你浏览器里算）
 
-![网页版界面](examples/screenshot-web-pc-v3.png)
+![网页版界面](examples/screenshot-web-pc-v4.png)
 
 </div>
 
