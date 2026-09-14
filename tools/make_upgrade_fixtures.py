@@ -3,18 +3,20 @@
 """
 make_upgrade_fixtures.py —— 重新生成「历史回放页升级」测试的黄金样本。
 
-背景：tests/fixtures/*.html 是四个代表世代的真实回放页，喂给 tools/test_upgrade.js
+背景：tests/fixtures/*.html 是五个代表世代的真实回放页，喂给 tools/test_upgrade.js
 做升级回归测试。样本从 git 历史里「复活」：逐个 checkout 当年的 svg2canvas.py，
 用同一张小图 + 小 SVG 跑出当年的产物。这样样本不是手搓的假货，而是真实世代形态。
 
-四个代表样本（文件 → 来源 commit → 分工）：
+五个代表样本（文件 → 来源 commit → 分工）：
   s1-29770ea.html   初版（金色 UI、老时间轴、无缩放）
                     —— 模糊规则全量跑一遍：AXIS_OLD 时间轴替换 + 42 条布局升级
   s4-eaa6ea5.html   双栏各自独立（相册式已就位、缺后续修复）
                     —— #18 的「世代跨度」场景（中间世代也要升得动）
   s6-v1.html        第一个带戳的模板（v1，描述框固定高）—— 489f2a6 生成
-                    —— 迁移链的输入（v1→v2 描述框自动变高）
-  s7-v2.html        当前模板（v2，描述框自动变高）—— 工作区生成
+                    —— 迁移链的输入（v1→v2 描述框自动变高、→v3 可输入）
+  s7-v2.html        模板 v2（描述框自动变高）—— 快照，已冻结（FROZEN）
+                    —— v2→v3 迁移的输入（模板升 v3 时由「直通」退位）
+  s8-v3.html        当前模板（v3，描述框可输入）—— 工作区生成
                     —— 验证「带戳最新产物零改动直通」
 
 （更细的世代样本——s2 缩放初版 / s3 相册式初版 / s5 描述首版——2026-09-14 精简掉了：
@@ -33,12 +35,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIX = os.path.join(ROOT, "tests", "fixtures")
 PY = sys.executable
 
-# (输出名, commit, 分工)；commit=None 表示用当前工作区的脚本
+# (输出名, commit, 分工)；commit=None 表示用当前工作区的脚本；
+# "FROZEN" = 快照样本（模板已升代、它退位为迁移输入，重造会变味成新模板，跳过生成）
 SAMPLES = [
     ("s1-29770ea.html", "29770ea", "初版（模糊规则全量：老时间轴 + 老布局）"),
     ("s4-eaa6ea5.html", "eaa6ea5", "中间世代（相册式已就位、缺后续修复）"),
     ("s6-v1.html", "489f2a6", "第一个带戳的模板（v1，迁移链输入）"),
-    ("s7-v2.html", None, "当前模板（v2）—— 直通验证"),
+    ("s7-v2.html", "FROZEN", "模板 v2（描述框自动变高）—— v2→v3 迁移的输入，已冻结"),
+    ("s8-v3.html", None, "当前模板（v3）—— 直通验证"),
 ]
 
 
@@ -61,6 +65,10 @@ def main():
     todo = []
     for name, commit, note in SAMPLES:
         p = os.path.join(FIX, name)
+        if commit == "FROZEN":
+            if not os.path.exists(p):
+                print("！冻结样本缺失：%s（需从 git 历史手工重造，见文件头注释）" % name)
+            continue
         if force or not os.path.exists(p):
             todo.append((name, commit, note))
     if not todo:

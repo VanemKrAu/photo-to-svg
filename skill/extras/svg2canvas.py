@@ -273,7 +273,7 @@ TEMPLATE = r'''<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- p2sv-gen: v2 -->
+<!-- p2sv-gen: v3 -->
 <title>__TITLE__</title>
 <!-- 图标内联成 data URI（64×64 PNG）：回放页是独立文件，下载到哪儿、发给谁，
      都得自带图标 —— 不要换成外部文件引用，那样一挪位置就没了。 -->
@@ -323,6 +323,9 @@ TEMPLATE = r'''<!DOCTYPE html>
   .desc-head button{background:transparent;border:0;color:var(--dim);font-size:12px;
     line-height:1;padding:2px 4px;cursor:pointer}
   .desc-panel textarea{width:100%;resize:none;min-height:76px;max-height:42vh;
+    /* v3：顶栏（header）整体 user-select:none 会连带吃掉 textarea 的聚焦 ——
+       Safari / 部分 Android WebView 里表现为光标出不来、无法输入，这里显式恢复 */
+    -webkit-user-select:text;user-select:text;
     background:var(--graphite);border:1px solid var(--line);border-radius:3px;
     color:var(--text);font:inherit;font-size:12.5px;line-height:1.7;padding:8px 10px;outline:none}
   .desc-panel textarea:focus{border-color:#3A3A42}

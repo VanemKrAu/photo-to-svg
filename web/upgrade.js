@@ -31,8 +31,9 @@
 })(typeof self !== 'undefined' ? self : this, function () {
 "use strict";
 
-var GEN_LATEST = 2;      /* 当前回放页模板版本。v1 = 第一个带版本戳的模板（2026-09-14）；
-                            v2 = 描述框自动变高（同日）；改模板行为时 +1 并追加迁移 */
+var GEN_LATEST = 3;      /* 当前回放页模板版本。v1 = 第一个带版本戳的模板（2026-09-14）；
+                            v2 = 描述框自动变高（同日）；v3 = 描述框可输入（user-select
+                            修复，同日）；改模板行为时 +1 并追加迁移 */
 var LEGACY_TARGET = 1;   /* 模糊规则升完的等价版本。恒为 1，不随 GEN_LATEST 变 */
 
 /* v1 → v2 迁移要注入的 descAutoSize 及其注释（与写入迁移那一刻的模板逐字一致；
@@ -56,6 +57,13 @@ var DESC_AUTOSIZE_DEF = [
   '  descInput.style.height=Math.max(76, Math.min(need, max))+"px";',
   '  descInput.style.overflowY=(need>max)?"auto":"hidden";',
   '}',
+].join('\n');
+
+/* v2 → v3 迁移要注入的 CSS 段（与写入迁移那一刻的模板逐字一致；从写完起即冻结）。 */
+var DESC_FOCUS_FIX = [
+  '    /* v3：顶栏（header）整体 user-select:none 会连带吃掉 textarea 的聚焦 ——',
+  '       Safari / 部分 Android WebView 里表现为光标出不来、无法输入，这里显式恢复 */',
+  '    -webkit-user-select:text;user-select:text;',
 ].join('\n');
 
 var MIGRATIONS = [
@@ -84,6 +92,25 @@ var MIGRATIONS = [
           'descRevert.addEventListener("click", function(){\n  try{ localStorage.removeItem(DESC_KEY); }catch(_){}\n  descApply(DESC_ORIG);\n  descAutoSize();\n});');
       put('document.addEventListener("keydown", function(e){\n  if(e.key==="Escape" && !descPanel.hidden) descOpen(false);\n});',
           'document.addEventListener("keydown", function(e){\n  if(e.key==="Escape" && !descPanel.hidden) descOpen(false);\n});\n/* 窗口尺寸一变，描述框的可用上限也跟着变：展开状态下重算一次 */\nwindow.addEventListener("resize", function(){ if(!descPanel.hidden) descAutoSize(); });');
+      return n ? t : null;
+    }
+  },
+  { from: 2, to: 3,
+    /* v3：描述框可输入（user-select 修复）。顶栏（header）整体 user-select:none，
+       在 Safari / 部分 Android WebView 里会连带吃掉 textarea 的聚焦 —— 用户报
+       「光标出不来、没法输入」。在 .desc-panel textarea 上显式恢复 user-select:text。
+       没有描述框的老世代不命中 —— 返回 null，版本照常推进（applyMigrations 的约定）。 */
+    apply: function(t){
+      var n = 0;
+      function put(from, to){
+        if (t.indexOf(to) >= 0) return;                              /* 效果已在：跳过（幂等） */
+        var i = t.indexOf(from);
+        if (i < 0 || t.indexOf(from, i + from.length) >= 0) return;  /* 找不到 / 不唯一：跳过 */
+        t = t.replace(from, to);
+        n++;
+      }
+      put('textarea{width:100%;resize:none;min-height:76px;max-height:42vh;',
+          'textarea{width:100%;resize:none;min-height:76px;max-height:42vh;\n' + DESC_FOCUS_FIX);
       return n ? t : null;
     }
   },

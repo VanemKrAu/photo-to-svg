@@ -3,7 +3,7 @@
  *
  * 为什么需要它：升级层出过两个「静默失败」型事故（docs/踩坑记录.md #18 #19）——
  * 页面看着能用、日志没有错，只是升级没生效 / 重复打了补丁。这类问题只有真跑一遍
- * 「升级后的产物」才抓得到。本测试把四个代表世代的真实回放页（tests/fixtures/，
+ * 「升级后的产物」才抓得到。本测试把五个代表世代的真实回放页（tests/fixtures/，
  * 由 tools/make_upgrade_fixtures.py 从 git 历史生成）逐个升级，断言：
  *
  *   1. 版本戳：升级后 == GEN_LATEST，且全篇只有一个戳；
@@ -66,22 +66,25 @@ const shouldGone = [
   [/var LW = SKETCH_T>0/g, "旧时间轴代码段被替换"],
 ];
 
-/* 样本清单 —— 四个代表世代，各有明确分工，加样本前先想清楚「它防的是哪次事故」：
+/* 样本清单 —— 五个代表世代，各有明确分工，加样本前先想清楚「它防的是哪次事故」：
      s1 = 最老（模糊规则全量：AXIS_OLD 时间轴替换 + 42 条布局升级都跑一遍）
      s4 = 中间世代（相册式已就位、缺后续修复 —— #18 的「世代跨度」场景）
-     s6 = 第一个带戳的模板 v1（迁移链的输入：v1→v2 描述框自动变高）
-     s7 = 当前模板 v2（验证「带戳最新产物零改动直通」） */
+     s6 = 模板 v1（迁移链输入：v1→v2 描述框自动变高、→v3 可输入）
+     s7 = 模板 v2（v2→v3 迁移输入；模板升 v3 后由「直通」退位）
+     s8 = 当前模板 v3（验证「带戳最新产物零改动直通」） */
 const FEATURES = {
   "s1-29770ea.html": ["sqrt", "view", "w800"],
   "s4-eaa6ea5.html": ["view", "w800"],
-  "s6-v1.html": ["descAuto"],
-  "s7-v2.html": [],
+  "s6-v1.html": ["descAuto", "focusFix"],
+  "s7-v2.html": ["focusFix"],
+  "s8-v3.html": [],
 };
 const FEAT_RE = {
   sqrt: [/Math\.sqrt\(AREA\[i\]\)/g, "新时间轴（√面积）"],
   view: [/id="view"/g, "相册式 view 容器"],
   w800: [/innerWidth>=800/g, "并排对照阈值 800"],
   descAuto: [/function descAutoSize\(\)/, "描述框自动变高（v1→v2 迁移）"],
+  focusFix: [/-webkit-user-select:text;user-select:text/g, "描述框可输入（v2→v3 迁移）"],
 };
 
 function testUnits() {
@@ -118,7 +121,7 @@ function testUnits() {
 }
 
 function testSamples() {
-  console.log("\n[3/3] 样本：四个代表世代逐个升级");
+  console.log("\n[3/3] 样本：五个代表世代逐个升级");
   const files = Object.keys(FEATURES);
   for (const f of files) {
     const p = path.join(FIX, f);
@@ -153,10 +156,13 @@ function testSamples() {
 
     /* 逐样本特性 */
     if (f === "s6-v1.html") {
-      truthy(r.changed === true, "v1 产物沿迁移链升到 v2（changed=true）");
+      truthy(r.changed === true, "v1 产物沿迁移链升到最新（changed=true）");
     }
     if (f === "s7-v2.html") {
-      truthy(r.changed === false && r.text === html, "带戳最新版（v2）：零改动直通");
+      truthy(r.changed === true, "v2 产物拿到 v2→v3 迁移（changed=true）");
+    }
+    if (f === "s8-v3.html") {
+      truthy(r.changed === false && r.text === html, "带戳最新版（v3）：零改动直通");
     }
     for (const key of FEATURES[f]) {
       const [re, label] = FEAT_RE[key];
@@ -165,6 +171,9 @@ function testSamples() {
     if (FEATURES[f].indexOf("descAuto") >= 0) {
       eq(count(r.text, /window\.addEventListener\("resize", function\(\)\{ if\(!descPanel\.hidden\) descAutoSize\(\); \}\);/g),
          1, "描述框 resize 监听唯一（迁移不重复注入）");
+    }
+    if (FEATURES[f].indexOf("focusFix") >= 0) {
+      eq(count(r.text, /-webkit-user-select:text/g), 1, "user-select 恢复唯一（迁移不重复注入）");
     }
   }
 }

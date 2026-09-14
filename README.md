@@ -204,7 +204,7 @@ cp -r skill ~/.agents/skills/image-to-css-art
 | [`ATTRIBUTION.md`](ATTRIBUTION.md) | **出处、上游项目、许可** |
 | [`docs/原理与流程.md`](docs/原理与流程.md) | 整条流水线怎么走的、数据格式、关键设计 |
 | [`docs/参数速查.md`](docs/参数速查.md) | 每个参数怎么选、不同图类型的经验值 |
-| [`docs/踩坑记录.md`](docs/踩坑记录.md) | **22 个真实踩过的坑**及修法 + 防线索引（改代码前必读） |
+| [`docs/踩坑记录.md`](docs/踩坑记录.md) | **23 个真实踩过的坑**及修法 + 防线索引（改代码前必读） |
 | [`docs/历史升级机制.md`](docs/历史升级机制.md) | 网页版历史作品怎么升级（版本戳 + 迁移链 + 黄金样本测试） |
 | [`AGENTS.md`](AGENTS.md) | 给 AI 助手的操作规则（让它直接照做） |
 | [`SETUP.md`](SETUP.md) | 换设备 / 换系统的详细安装步骤 |
@@ -231,14 +231,14 @@ photo-to-svg/
 │   ├── smoke_test.py       一条命令自检（依赖/语法/同步/常量/升级测试/实跑+底板）
 │   ├── secret_scan.py      推送前密钥自检
 │   ├── test_upgrade.js     历史升级的黄金样本测试（node）
-│   ├── make_upgrade_fixtures.py  从 git 历史重造黄金样本（四个代表世代）
+│   ├── make_upgrade_fixtures.py  从 git 历史重造黄金样本（五个代表世代）
 │   └── shot_web.py         更新 README 界面截图（需 playwright）
 ├── web/                    ★ 网页版（GitHub Pages）
 │   ├── index.html          界面
 │   ├── worker.js           Web Worker：加载 Pyodide、跑流水线
 │   ├── upgrade.js          历史回放页升级库（版本戳 + 迁移链，纯函数、可单测）
 │   └── web_run.py          浏览器端驱动（不走 subprocess，直接调模块）
-├── tests/fixtures/         四个代表世代的回放页样本（给升级测试用）
+├── tests/fixtures/         五个代表世代的回放页样本（给升级测试用）
 ├── docs/                   文档
 ├── examples/               示例图
 ├── .github/workflows/      发布网页版到 Pages
@@ -250,7 +250,7 @@ photo-to-svg/
 ## 致谢
 
 - **[AvroraCL/image-to-css-art](https://github.com/AvroraCL/image-to-css-art)** —— 算法管线与 skill 本体，MIT 许可
-- 本项目的 SVG 输出、Canvas 回放页、时间轴设计、以及那 22 条踩坑记录，都是在它之上做的
+- 本项目的 SVG 输出、Canvas 回放页、时间轴设计、以及那 23 条踩坑记录，都是在它之上做的
 
 ## 许可
 
