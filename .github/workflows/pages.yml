@@ -61,8 +61,8 @@ jobs:
             echo "首页 = 新版（new）"
           fi
 
-          # 两版共用的运行时与流水线
-          cp web/worker.js web/web_run.py _site/
+          # 两版共用的运行时与流水线（upgrade.js = 历史回放页升级库，页面直接引用）
+          cp web/worker.js web/web_run.py web/upgrade.js _site/
           # 站点图标（浏览器标签页 / iOS 加到主屏）
           cp web/favicon.ico web/apple-touch-icon.png _site/
           # 流水线脚本（与仓库里同一份，不复制一份改过的）
@@ -77,7 +77,7 @@ jobs:
         run: |
           set -e
           fail=0
-          for f in index.html new.html classic.html worker.js web_run.py \
+          for f in index.html new.html classic.html worker.js web_run.py upgrade.js \
                    tools/build_svg_art.py tools/svg2canvas.py \
                    scripts/css_art/regions.py scripts/css_art/geometry.py \
                    scripts/css_art/quality.py scripts/css_art/render.py \

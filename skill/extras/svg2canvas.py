@@ -262,11 +262,18 @@ def build_lineart(photo, W, H, dark=0.78, seg_pts=16, min_pts=8, approx=1.0, lon
     return out
 
 
+# ⚠️ 模板版本（p2sv-gen 戳）：改动了这个模板输出的页面（布局 / 脚本 / 行为）时，
+#    必须做两件事 ——
+#    ① 把下面 <title> 前那行的戳版本号 +1（形如 <!-- p2sv-gen: vN -->）；
+#    ② 给 web/upgrade.js 的 GEN_LATEST +1，并追加一条 { from: 旧, to: 新, apply } 迁移。
+#    用户浏览器里存的历史作品，打开时靠这条链被精确升级（docs/历史升级机制.md）。
+#    生成端（本文件）打戳、升级端（web/upgrade.js）读戳 —— 两处版本号必须一致。
 TEMPLATE = r'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- p2sv-gen: v1 -->
 <title>__TITLE__</title>
 <!-- 图标内联成 data URI（64×64 PNG）：回放页是独立文件，下载到哪儿、发给谁，
      都得自带图标 —— 不要换成外部文件引用，那样一挪位置就没了。 -->

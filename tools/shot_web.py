@@ -265,9 +265,12 @@ async def run(args):
     if not os.path.isfile(ref):
         sys.exit("找不到参考图：" + ref)
 
-    # 拼一个和 GitHub Pages 同构的最小站点：index.html + worker.js（替身）+ 参考图
+    # 拼一个和 GitHub Pages 同构的最小站点：index.html + upgrade.js + worker.js（替身）+ 参考图
     site = tempfile.mkdtemp(prefix="shot-web-")
     shutil.copy(html, os.path.join(site, "index.html"))
+    up = os.path.join(os.path.dirname(html), "upgrade.js")
+    if os.path.isfile(up):
+        shutil.copy(up, os.path.join(site, "upgrade.js"))
     shutil.copy(ref, os.path.join(site, "src-ref.jpg"))
     with open(os.path.join(site, "worker.js"), "w", encoding="utf-8") as f:
         f.write(FAKE_WORKER)
