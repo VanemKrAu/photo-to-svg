@@ -12,7 +12,7 @@ make_art.py —— 一条命令跑完「照片 → 描摹 SVG → Canvas 逐笔�
 
 用法：
   python3 tools/make_art.py <原图> <作品名> [标题] [秒数] [线稿时间占比] [epsilon] [线宽]
-                            [--preprocess=none|auto|illust]
+                            [--preprocess=none|auto|illust] [--desc="图片描述"]
 
   秒数          1× 速度下播完整幅画的时间，默认 90
   线稿时间占比  默认 0 —— 不单独控制，线稿跟色块各自按视觉重量播（实测占 3~4% 时间）；
@@ -23,9 +23,13 @@ make_art.py —— 一条命令跑完「照片 → 描摹 SVG → Canvas 逐笔�
   --preprocess=illust   插画/动漫图：2x 放大 + NL-Means 降噪（平坦区更干净）
   --preprocess=auto     宽度 < 1200 时自动 2x 放大（小图边缘更顺）
   --preprocess=none     原样描摹（默认）
+  --desc="…"            图片描述：写进回放页顶栏「描述」，收起显示一行、点击展开编辑。
+                        agent 干活时先看图写 1~3 句（画面主体 / 场景 / 色调），再传入；
+                        网页版生成的作品没有描述（留空），可在回放页里自由补填
 
 例：
-  python3 tools/make_art.py 照片.jpg 海边人像 "海边人像 · 逐笔绘制回放" 90 0 0.25 2.6
+  python3 tools/make_art.py 照片.jpg 海边人像 "海边人像 · 逐笔绘制回放" 90 0 0.25 2.6 \
+      --desc="黄昏的海滩，一位穿浅色连衣裙的少女侧身站在浪边，暖色调"
   python3 tools/make_art.py 插画.png 浴室少女 "浴室少女" 90 0 0.25 2.2 --preprocess=illust
 """
 import os
@@ -146,9 +150,12 @@ def main():
     argv = [a for a in sys.argv[1:] if not a.startswith("--")]
     flags = [a for a in sys.argv[1:] if a.startswith("--")]
     pre = "none"
+    desc = ""
     for f in flags:
         if f.startswith("--preprocess="):
             pre = f.split("=", 1)[1]
+        elif f.startswith("--desc="):
+            desc = f.split("=", 1)[1]
     if pre not in ("none", "auto", "illust"):
         raise SystemExit("--preprocess 只能是 none / auto / illust")
     if len(argv) < 2:
@@ -191,7 +198,7 @@ def main():
 
     print("\n［3/3］生成 Canvas 回放页（线稿层 + 扫描线切分 + 视觉重量时间轴）")
     run([sys.executable, os.path.join(TOOLS, "svg2canvas.py"), svg, photo,
-         html, title, dur, "0", outl, linew])
+         html, title, dur, "0", outl, linew, desc])
 
     # 自检：回放页的画布尺寸必须和 SVG 的 viewBox 一致，
     # 否则线稿层会按错误尺寸提边缘（整体错位），页面显示也会被拉伸。

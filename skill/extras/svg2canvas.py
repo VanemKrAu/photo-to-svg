@@ -13,7 +13,8 @@ svg2canvas.py —— 把 build_svg_art.py 生成的巨型 SVG 改造成 Canvas �
 
 体积参考：182640 笔 / 149 万顶点 → payload 约 12 MB。
 """
-import sys, re, math, base64, struct, array, io, json, os
+import sys, re, math, base64, struct, array, io, json, os, hashlib
+from html import escape as _hesc
 import numpy as np
 
 TEMPLATE_W, TEMPLATE_H = 1440, 2162   # 仅作回退默认值；真实尺寸一律从 SVG 的 viewBox 读
@@ -295,6 +296,34 @@ TEMPLATE = r'''<!DOCTYPE html>
   header .rec i{width:6px;height:6px;border-radius:50%;background:var(--err);display:block}
   header .rec.live i{animation:blink 1.1s steps(1,end) infinite}
   @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:.15}}
+  /* ---------- 图片描述：折叠在顶栏右端 ---------------------------------
+     agent 生成时写入的描述（或用户自己补的）：收起时只占一行、超出省略；
+     点击展开面板看全文 / 自由编辑。编辑结果自动存在本机浏览器（localStorage，
+     不写回文件），生成时写入的原文可用「恢复原始描述」找回。 */
+  .desc{position:relative;flex:0 1 auto;min-width:0}
+  .desc-sum{display:flex;align-items:center;gap:6px;min-width:0;max-width:min(340px,38vw);
+    background:transparent;border:1px solid transparent;border-radius:3px;
+    padding:4px 8px;cursor:pointer;color:var(--muted)}
+  .desc-sum .dt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .desc.empty .desc-sum .dt{color:#5A5A60}
+  .desc-panel{position:absolute;top:calc(100% + 8px);right:0;z-index:40;
+    width:min(360px,calc(100vw - 24px));display:flex;flex-direction:column;gap:9px;
+    background:rgba(11,11,13,.9);border:1px solid var(--line);border-radius:5px;padding:11px;
+    -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+    box-shadow:0 14px 44px rgba(0,0,0,.65)}
+  .desc-panel[hidden]{display:none}
+  .desc-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .desc-head button{background:transparent;border:0;color:var(--dim);font-size:12px;
+    line-height:1;padding:2px 4px;cursor:pointer}
+  .desc-panel textarea{width:100%;resize:vertical;min-height:76px;max-height:42vh;
+    background:var(--graphite);border:1px solid var(--line);border-radius:3px;
+    color:var(--text);font:inherit;font-size:12.5px;line-height:1.7;padding:8px 10px;outline:none}
+  .desc-panel textarea:focus{border-color:#3A3A42}
+  .desc-panel textarea::placeholder{color:#5A5A60}
+  .desc-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .desc-foot button{background:transparent;border:0;color:var(--dim);font-size:11px;
+    padding:0;cursor:pointer;text-decoration:underline}
+  .desc-foot .hi{font:400 10.5px var(--mono);color:#5A5A60;white-space:nowrap}
   .stage{position:relative;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;
     padding:8px;gap:14px}
   /* .frame 是「视口」：撑满整个可用区域，图片按适配尺寸居中显示。
@@ -416,6 +445,8 @@ TEMPLATE = r'''<!DOCTYPE html>
     header{padding:0 12px;gap:9px}
     /* 窄屏顶栏放不下三组信息：头两段让位，标题和 REC 角标保留 */
     header .k.hide-sm,header .sep.hide-sm{display:none}
+    /* 描述也收窄 —— 38vw 会把标题挤得只剩几十像素 */
+    .desc-sum{max-width:30vw}
     footer{padding:9px 12px calc(11px + env(safe-area-inset-bottom))}
     .sp button{padding:5px 9px}
   }
@@ -429,6 +460,7 @@ TEMPLATE = r'''<!DOCTYPE html>
     .bar .knob{transition:transform .1s ease}
     .zoombar button:hover{background:var(--hilite)}
     #ghostBtn:hover{background:var(--hilite)}
+    .desc-head button:hover,.desc-foot button:hover{background:transparent;color:var(--text)}
   }
 </style>
 </head>
@@ -439,6 +471,19 @@ TEMPLATE = r'''<!DOCTYPE html>
   <h1>__TITLE__</h1>
   <div class="n">__NSTR__ 笔 · 回放</div>
   <div class="rec live"><i></i>REC</div>
+  <div class="desc" id="desc">
+    <button class="desc-sum" id="descSum" type="button" aria-expanded="false" aria-controls="descPanel"
+      title="图片描述（点击展开）"><span class="k">描述</span><span class="dt" id="descText">__DESC_HTML__</span></button>
+    <div class="desc-panel" id="descPanel" hidden>
+      <div class="desc-head"><span class="k">图片描述</span>
+        <button id="descClose" type="button" title="收起">✕</button></div>
+      <textarea id="descInput" rows="4" placeholder="写下这张图片的内容描述……">__DESC_HTML__</textarea>
+      <div class="desc-foot">
+        <button id="descRevert" type="button" hidden>恢复原始描述</button>
+        <span class="hi">改动只存本机浏览器，不写回文件</span>
+      </div>
+    </div>
+  </div>
 </header>
 
 <div class="stage">
@@ -758,8 +803,49 @@ document.addEventListener("keydown",function(e){
   else if(e.key==="0"){ e.preventDefault(); pause(); resetView(); resetSide(); }
   else if(e.key==="1"){ e.preventDefault(); pause(); setZoomAt(1/fitScale); setZoomAt2(1/fitScale); }
   else if(e.key==="+"||e.key==="="){ e.preventDefault(); pause(); zoomBy(1.4); }
-  else if(e.key==="-"||e.key==="_"){ e.preventDefault(); pause(); zoomBy(1/1.4); }
+  else if(e.key==="-"){ e.preventDefault(); pause(); zoomBy(1/1.4); }
 });
+
+/* ---------- 图片描述：收起只显示一行，点击展开面板可读全文 / 自由编辑。
+   编辑结果自动存在本机浏览器（localStorage），不写回文件；
+   生成时由 --desc 写入的原文随时可用「恢复原始描述」找回。 ---------- */
+var DESC_ORIG=__DESC_JS__, DESC_KEY="__DESCKEY__";
+var descBox=document.getElementById("desc"),
+    descSum=document.getElementById("descSum"),
+    descPanel=document.getElementById("descPanel"),
+    descInput=document.getElementById("descInput"),
+    descText=document.getElementById("descText"),
+    descRevert=document.getElementById("descRevert");
+function descApply(t){
+  descInput.value=t;
+  descText.textContent=t || "点击补充";
+  descBox.classList.toggle("empty", !t);
+  descRevert.hidden=!(DESC_ORIG && t!==DESC_ORIG);
+}
+function descOpen(on){
+  descPanel.hidden=!on;
+  descSum.setAttribute("aria-expanded", on?"true":"false");
+}
+descSum.addEventListener("click", function(){ descOpen(descPanel.hidden); });
+document.getElementById("descClose").addEventListener("click", function(){ descOpen(false); });
+descInput.addEventListener("input", function(){
+  try{ localStorage.setItem(DESC_KEY, descInput.value); }catch(_){}
+  descApply(descInput.value);
+});
+descRevert.addEventListener("click", function(){
+  try{ localStorage.removeItem(DESC_KEY); }catch(_){}
+  descApply(DESC_ORIG);
+});
+/* 面板内的按键不冒泡到全局快捷键（否则空格 / 方向键会被播放器抢走）；
+   Esc 除外 —— 留给「点面板外 / 按 Esc 收起」那两条。 */
+descBox.addEventListener("keydown", function(e){ if(e.key!=="Escape") e.stopPropagation(); });
+document.addEventListener("click", function(e){
+  if(!descPanel.hidden && !descBox.contains(e.target)) descOpen(false);
+});
+document.addEventListener("keydown", function(e){
+  if(e.key==="Escape" && !descPanel.hidden) descOpen(false);
+});
+descApply((function(){ try{ var v=localStorage.getItem(DESC_KEY); return v===null?DESC_ORIG:v; }catch(_){ return DESC_ORIG; } })());
 
 /* ---- 精确布局：按可用空间等比缩放画框（不依赖 aspect-ratio 的浏览器实现） ---- */
 var stageEl=document.querySelector(".stage"), sideEl=document.getElementById("side");
@@ -1068,9 +1154,11 @@ def main():
   7  线稿时间占比      0 = 不单独控制（默认）——线稿跟色块一起按视觉重量播，
                       实测占 3~4%（90 秒里 3 秒出头）；给个 0~1 的小数则固定起稿阶段占比
   8  线宽              线稿线条宽度（画布原生像素，默认 2.6）
+  9  描述              图片描述（可空）—— 显示在回放页顶栏「描述」里，点击可展开编辑；
+                      agent 生成时写入（make_art.py --desc="…"），网页版留空
 
 例：
-  python3 svg2canvas.py 作品.svg 原图.jpg 作品.html "作品 · 逐笔绘制回放" 90 0 0 2.6
+  python3 svg2canvas.py 作品.svg 原图.jpg 作品.html "作品 · 逐笔绘制回放" 90 0 0 2.6 "一句话描述"
 """)
         return
     if len(sys.argv) < 6:
@@ -1081,6 +1169,7 @@ def main():
     sp = float(sys.argv[6]) if len(sys.argv) > 6 else 0.0    # 0 = 按实际线稿笔数自动算
     linew = float(sys.argv[8]) if len(sys.argv) > 8 else 2.6  # 线稿线宽
     st = float(sys.argv[7]) if len(sys.argv) > 7 else 0.0    # 线稿阶段时间占比；0 = 不单独控制（跟色块一起按视觉重量）
+    desc = sys.argv[9] if len(sys.argv) > 9 else ""          # 图片描述（agent 生成时写入；可空）
     print("解析 SVG…")
     d = parse_svg(src)
     # 回放页的底板色必须和 SVG 里的底板一致（同源）：两边不一致时（比如底板
@@ -1134,12 +1223,18 @@ def main():
             .replace("__SP__", "%.4f" % (sp if sp > 0 else (nline / max(1, d['n']))))
             .replace("__ST__", str(st))
             .replace("__LINEW__", str(linew))
+            .replace("__DESC_HTML__", _hesc(desc))
+            .replace("__DESC_JS__", json.dumps(desc).replace("<", "\\u003c"))
+            .replace("__DESCKEY__", "p2sv-desc-" + hashlib.md5(
+                ("%s|%dx%d" % (title, d['w'], d['h'])).encode("utf-8")).hexdigest()[:12])
             .replace("__BG__", bgcolor))
     open(out, "w", encoding="utf-8").write(html)
     real_sp = sp if sp > 0 else (nline / max(1, d['n']))
     stxt = ("%.0f%% 时间" % (st * 100)) if st > 0 else "按视觉重量自然分配"
     print("写出 %s  %.2f MB  (线稿 %d 笔 = %.1f%% 笔 / %s)" % (
         out, os.path.getsize(out) / 1e6, nline, real_sp * 100, stxt))
+    if desc:
+        print("  描述 %d 字已写入（回放页顶栏「描述」，点击可展开编辑）" % len(desc))
 
 
 if __name__ == "__main__":
