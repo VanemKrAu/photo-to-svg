@@ -87,10 +87,11 @@ For the full pipeline (SVG + Canvas replay page in one command) see
 <https://github.com/VanemKrAu/photo-to-svg>: `tools/make_art.py`,
 documented in its `README.md` and `AGENTS.md`.
 
-`--dark-cut` (default 14) flattens pixels matching the matte. This matters for dark photos,
-whose near-black background is full of JPEG noise that would otherwise become hundreds of
-meaningless fragments; always set `--background` to the image's actual background color for
-such inputs. Report **foreground MAE**, not whole-image MAE.
+The matte is fixed to paper white (`#f0f0f0`) — the whole picture is drawn on a white sheet,
+stroke by stroke, and nothing is skipped for color reasons (there is no "close to the matte =
+do not draw" pass). Keep `--dark-cut` at 0 (its default): a positive value flattens pixels
+that happen to sit near the matte and can wipe out real image areas.
+Report **foreground MAE**, not whole-image MAE.
 
 See [extras/README.md](extras/README.md). Neither script modifies an upstream file, and the
 whole directory can be deleted independently.
