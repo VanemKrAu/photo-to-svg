@@ -136,6 +136,7 @@ function testSamples() {
     /* 版本戳与幂等 */
     eq(r.version, U.GEN_LATEST, "升级后版本 = GEN_LATEST");
     eq(count(r.text, /p2sv-gen/g), 1, "全篇一个戳");
+    eq(U.readVersion(r.text), U.GEN_LATEST, "戳文本已推进到 GEN_LATEST");
     truthy(U.upgradeReplay(html, null).text === r.text, "同一输入两次升级结果一致（确定性）");
 
     /* 幂等：从升级结果（去戳）再升一遍 == 直接从原件升一遍（都去戳后比较） */

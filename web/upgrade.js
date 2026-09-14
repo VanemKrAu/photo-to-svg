@@ -131,6 +131,15 @@ function stampVersion(text, ver){
          '<!-- p2sv-gen: v' + ver + ' -->\n' + text.slice(lineStart);
 }
 
+function replaceStamp(text, ver){
+  /* 把已有的版本戳推进到 ver —— 迁移链跑完后调用，让「文件自称的版本」与实际
+     内容一致（文档承诺的「升级完再跑一遍对不上 from」就靠它；下载升级后的
+     文件时也带着正确的戳）。没有戳则原样返回（补戳由 stampVersion 负责）。 */
+  var re = /<!--\s*p2sv-gen:\s*v\d+\s*-->/;
+  if (!re.test(text)) return text;
+  return text.replace(re, '<!-- p2sv-gen: v' + ver + ' -->');
+}
+
 function applyMigrations(text, fromVer, latest, migrations){
   /* 精确迁移链：从 fromVer 逐级走到 latest。
      迁移未命中（apply 返回 null）→ 跳过但推进版本；
@@ -808,6 +817,7 @@ function upgradeReplay(text, svgHead){
     var r = applyMigrations(out, ver, GEN_LATEST, MIGRATIONS);
     out = r.text; ver = r.version;
     notes = notes.concat(r.notes);
+    out = replaceStamp(out, ver);     /* 戳推进到实际内容版本（无戳产物补戳后也走到这） */
   }
   /* 底板色修复：对新产物是 no-op；对老产物把写死的浅底换回 SVG 里的权威值 */
   if (svgHead) {
