@@ -74,7 +74,9 @@ def scan_paths(paths):
 
 
 def staged_files():
-    r = subprocess.run(["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
+    # core.quotepath=false：中文文件名默认会被 git 输出成 "\350\270..." 转义形式，
+    # os.path.exists 检查必然失败 → 中文名文件被静默跳过、根本没扫（2026-09-14 修）。
+    r = subprocess.run(["git", "-c", "core.quotepath=false", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
                        capture_output=True, text=True)
     return [f for f in (r.stdout or "").splitlines() if f.strip() and os.path.exists(f)]
 
