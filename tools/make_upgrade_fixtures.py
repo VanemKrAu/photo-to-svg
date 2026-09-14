@@ -3,18 +3,22 @@
 """
 make_upgrade_fixtures.py —— 重新生成「历史回放页升级」测试的黄金样本。
 
-背景：tests/fixtures/*.html 是七个世代的真实回放页，喂给 tools/test_upgrade.js
+背景：tests/fixtures/*.html 是四个代表世代的真实回放页，喂给 tools/test_upgrade.js
 做升级回归测试。样本从 git 历史里「复活」：逐个 checkout 当年的 svg2canvas.py，
 用同一张小图 + 小 SVG 跑出当年的产物。这样样本不是手搓的假货，而是真实世代形态。
 
-七个样本（文件 → 来源 commit → 备注）：
-  s1-29770ea.html   照片转 SVG 流水线初版（金色 UI、老时间轴、无缩放）
-  s2-f742973.html   加入缩放与平移（有 zoom 按钮，仍是老时间轴）
-  s3-0f648ca.html   相册式缩放（√面积时间轴，缺后续修复）
-  s4-eaa6ea5.html   双栏各自独立（接近现状，缺取景器 UI / 描述）
-  s5-9ab8b88.html   图片描述版（描述功能首版）
-  s6-v1.html        第一个带版本戳的模板（v1，描述框固定高）—— 489f2a6 生成
+四个代表样本（文件 → 来源 commit → 分工）：
+  s1-29770ea.html   初版（金色 UI、老时间轴、无缩放）
+                    —— 模糊规则全量跑一遍：AXIS_OLD 时间轴替换 + 42 条布局升级
+  s4-eaa6ea5.html   双栏各自独立（相册式已就位、缺后续修复）
+                    —— #18 的「世代跨度」场景（中间世代也要升得动）
+  s6-v1.html        第一个带戳的模板（v1，描述框固定高）—— 489f2a6 生成
+                    —— 迁移链的输入（v1→v2 描述框自动变高）
   s7-v2.html        当前模板（v2，描述框自动变高）—— 工作区生成
+                    —— 验证「带戳最新产物零改动直通」
+
+（更细的世代样本——s2 缩放初版 / s3 相册式初版 / s5 描述首版——2026-09-14 精简掉了：
+断言上都有冗余覆盖，要恢复从 git 历史里 checkout 对应 commit 即可。）
 
 跑完自己验一遍：python tools/make_upgrade_fixtures.py
 （只重生成缺失的；--force 全部重来。改完 fixtures 记得跑 node tools/test_upgrade.js）
@@ -29,15 +33,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIX = os.path.join(ROOT, "tests", "fixtures")
 PY = sys.executable
 
-# (输出名, commit, 备注)；commit=None 表示用当前工作区的脚本
+# (输出名, commit, 分工)；commit=None 表示用当前工作区的脚本
 SAMPLES = [
-    ("s1-29770ea.html", "29770ea", "初版（金色 UI / 老时间轴）"),
-    ("s2-f742973.html", "f742973", "加缩放与平移"),
-    ("s3-0f648ca.html", "0f648ca", "相册式缩放"),
-    ("s4-eaa6ea5.html", "eaa6ea5", "双栏各自独立"),
-    ("s5-9ab8b88.html", "9ab8b88", "图片描述版（描述功能首版）"),
-    ("s6-v1.html", "489f2a6", "第一个带戳的模板（v1，描述框固定高）"),
-    ("s7-v2.html", None, "当前模板（v2，描述框自动变高）"),
+    ("s1-29770ea.html", "29770ea", "初版（模糊规则全量：老时间轴 + 老布局）"),
+    ("s4-eaa6ea5.html", "eaa6ea5", "中间世代（相册式已就位、缺后续修复）"),
+    ("s6-v1.html", "489f2a6", "第一个带戳的模板（v1，迁移链输入）"),
+    ("s7-v2.html", None, "当前模板（v2）—— 直通验证"),
 ]
 
 
@@ -63,7 +64,7 @@ def main():
         if force or not os.path.exists(p):
             todo.append((name, commit, note))
     if not todo:
-        print("七个样本都在（要重来加 --force）。")
+        print("样本都在（要重来加 --force）。")
         return
     os.makedirs(FIX, exist_ok=True)
     print("要生成 %d 个：%s" % (len(todo), "、".join(n for n, _, _ in todo)))

@@ -41,7 +41,7 @@
   （42 条「冰冻遗产」，不再新增）升完补戳；带 `<!-- p2sv-gen: vN -->` 戳的走精确迁移链。
   **改了回放页模板（`svg2canvas.py` 的 TEMPLATE）时的固定动作**：
   ① 模板里的戳版本号 +1；② `web/upgrade.js` 的 `GEN_LATEST` +1、给 `MIGRATIONS` 追加一条
-  `{ from: 旧, to: 新, apply }`；③ 跑 `node tools/test_upgrade.js`（七个黄金样本在
+  `{ from: 旧, to: 新, apply }`；③ 跑 `node tools/test_upgrade.js`（四个黄金样本在
   `tests/fixtures/`）。机制细节与已知边界见 [`docs/历史升级机制.md`](docs/历史升级机制.md)。
   **发布时 `upgrade.js` 必须带上**（pages.yml 已复制、`smoke_test.py` 会查）
 - **默认参数在 worker.js 里还有一层兜底**：主线程现在不传 `outline`，

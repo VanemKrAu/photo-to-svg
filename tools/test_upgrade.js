@@ -3,23 +3,28 @@
  *
  * 为什么需要它：升级层出过两个「静默失败」型事故（docs/踩坑记录.md #18 #19）——
  * 页面看着能用、日志没有错，只是升级没生效 / 重复打了补丁。这类问题只有真跑一遍
- * 「升级后的产物」才抓得到。本测试把七个世代的真实回放页（tests/fixtures/，由
- * tools/make_upgrade_fixtures.py 从 git 历史生成）逐个升级，断言：
+ * 「升级后的产物」才抓得到。本测试把四个代表世代的真实回放页（tests/fixtures/，
+ * 由 tools/make_upgrade_fixtures.py 从 git 历史生成）逐个升级，断言：
  *
  *   1. 版本戳：升级后 == GEN_LATEST，且全篇只有一个戳；
  *   2. 幂等：从「升级结果（去戳）」再升一遍，与从原件升一遍完全一致
  *      —— 即 legacy 规则自身不重复插入（#19 的幂等断言就是干这个的）；
  *   3. 防重复哨兵：var fitW / #fsExit / id="view" 的计数与最新模板一致；
  *   4. 逐样本特性：老世代该拿到的升级（√时间轴、相册式 view、并排阈值 800）都拿到；
- *   5. 迁移链机制：多级链 / 未命中推进 / 缺环停止 / 异常兜底（假迁移单元验证）。
+ *   5. 迁移链机制：多级链 / 未命中推进 / 缺环停止 / 异常兜底（假迁移单元验证）；
+ *   6. 内联 JS 语法：升级是文本手术，最坏的表现是「替换把 JS 弄坏、打开白页」——
+ *      用 node 的 vm 编译检查（比启浏览器轻三个数量级）。
  *
- * 用法：node tools/test_upgrade.js
- * 退出码：0 = 全过；1 = 有失败。配合 tools/test_upgrade.py 可再跑浏览器级验证。
+ * 用法：node tools/test_upgrade.js（smoke_test.py 会自动跑这一步）
+ * 退出码：0 = 全过；1 = 有失败。
+ * 浏览器级验证不属于日常（升级层大改时才需要）：把升级结果写到 /tmp 用浏览器
+ * 打开看一眼即可，方法见 docs/历史升级机制.md。
  */
 "use strict";
 
 const fs = require("fs");
 const path = require("path");
+const vm = require("vm");
 
 const ROOT = path.resolve(__dirname, "..");
 const FIX = path.join(ROOT, "tests", "fixtures");
@@ -32,6 +37,20 @@ const eq = (a, b, m) => a === b ? ok(m + "（" + a + "）")
                                  : bad(m + "：期望 " + b + "，实际 " + a);
 const truthy = (c, m) => c ? ok(m) : bad(m);
 const count = (t, re) => (t.match(re) || []).length;
+
+/* 升级后页面的内联 JS 语法必须仍然合法 —— 迁移是文本手术，替换错了最直接的表现
+   就是 JS 语法坏掉（浏览器里一打开就白页）。用 node 的 vm 编译检查，比启浏览器
+   轻得多。只查无属性的 <script>（带 type="text/plain" 的 payload 数据不算）。 */
+function jsSyntaxCheck(html){
+  const re = /<script>([\s\S]*?)<\/script>/g;
+  let m, n = 0;
+  while ((m = re.exec(html))) {
+    n++;
+    try { new vm.Script(m[1]); }
+    catch (e) { return { ok: false, count: n, err: String(e).split("\n")[0].slice(0, 120) }; }
+  }
+  return { ok: n > 0, count: n };
+}
 
 /* 升级结果里「戳」的总数 == 1；stripStamp 用于幂等比较（把戳还原掉再比） */
 const stripStamp = (t) => t.replace(/<!--\s*p2sv-gen:\s*v\d+\s*-->\n/, "");
@@ -47,14 +66,14 @@ const shouldGone = [
   [/var LW = SKETCH_T>0/g, "旧时间轴代码段被替换"],
 ];
 
-/* 样本清单：文件 → 期望拿到的升级特性（s1 最老，拿不全缩放系统是已知边界，见 README；
-   s5/s6 有描述框 → 应拿到 v1→v2 的描述框自动变高；s7 是最新模板，直通） */
+/* 样本清单 —— 四个代表世代，各有明确分工，加样本前先想清楚「它防的是哪次事故」：
+     s1 = 最老（模糊规则全量：AXIS_OLD 时间轴替换 + 42 条布局升级都跑一遍）
+     s4 = 中间世代（相册式已就位、缺后续修复 —— #18 的「世代跨度」场景）
+     s6 = 第一个带戳的模板 v1（迁移链的输入：v1→v2 描述框自动变高）
+     s7 = 当前模板 v2（验证「带戳最新产物零改动直通」） */
 const FEATURES = {
   "s1-29770ea.html": ["sqrt", "view", "w800"],
-  "s2-f742973.html": ["sqrt", "view", "w800"],
-  "s3-0f648ca.html": ["view", "w800"],
   "s4-eaa6ea5.html": ["view", "w800"],
-  "s5-9ab8b88.html": ["view", "w800", "descAuto"],
   "s6-v1.html": ["descAuto"],
   "s7-v2.html": [],
 };
@@ -99,7 +118,7 @@ function testUnits() {
 }
 
 function testSamples() {
-  console.log("\n[3/3] 样本：七个世代逐个升级");
+  console.log("\n[3/3] 样本：四个代表世代逐个升级");
   const files = Object.keys(FEATURES);
   for (const f of files) {
     const p = path.join(FIX, f);
@@ -127,6 +146,10 @@ function testSamples() {
     /* 结构不破坏 */
     truthy(r.text.indexOf("</html>") >= 0, "页面结构完整");
     truthy(/<canvas id="art"/.test(r.text), "canvas 在");
+
+    /* 内联 JS 语法（文本手术没把脚本弄坏） */
+    const js = jsSyntaxCheck(r.text);
+    truthy(js.ok, "内联 JS 语法有效（" + js.count + " 段）" + (js.ok ? "" : "：" + js.err));
 
     /* 逐样本特性 */
     if (f === "s6-v1.html") {

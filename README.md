@@ -90,7 +90,7 @@ cd photo-to-svg
 bash install.sh                       # 约 1 分钟，装依赖 + 自动自检
 ```
 
-装完想再确认一遍能不能用（会真跑一张小图 + 产物质量断言，约 1 分钟）：
+装完想再确认一遍能不能用（会真跑一张小图，约 30 秒）：
 
 ```bash
 .venv/bin/python tools/smoke_test.py --render
@@ -226,18 +226,17 @@ photo-to-svg/
 │   ├── build_svg_art.py    描摹核心（与 skill/extras/ 同一份）
 │   ├── svg2canvas.py       SVG → Canvas 回放页（与 skill/extras/ 同一份）
 │   ├── verify_svg.py       保真度校验（与 skill/extras/ 同一份）
-│   ├── smoke_test.py       一条命令自检（依赖/语法/同步/常量/升级测试/实跑）
+│   ├── smoke_test.py       一条命令自检（依赖/语法/同步/常量/升级测试/实跑+底板）
 │   ├── secret_scan.py      推送前密钥自检
 │   ├── test_upgrade.js     历史升级的黄金样本测试（node）
-│   ├── test_upgrade.py     同上 + 浏览器验证（playwright 可选）
-│   ├── make_upgrade_fixtures.py  从 git 历史重造黄金样本
+│   ├── make_upgrade_fixtures.py  从 git 历史重造黄金样本（四个代表世代）
 │   └── shot_web.py         更新 README 界面截图（需 playwright）
 ├── web/                    ★ 网页版（GitHub Pages）
 │   ├── index.html          界面
 │   ├── worker.js           Web Worker：加载 Pyodide、跑流水线
 │   ├── upgrade.js          历史回放页升级库（版本戳 + 迁移链，纯函数、可单测）
 │   └── web_run.py          浏览器端驱动（不走 subprocess，直接调模块）
-├── tests/fixtures/         七个世代的回放页样本（给升级测试用）
+├── tests/fixtures/         四个代表世代的回放页样本（给升级测试用）
 ├── docs/                   文档
 ├── examples/               示例图
 ├── .github/workflows/      发布网页版到 Pages

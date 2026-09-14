@@ -76,20 +76,11 @@ jobs:
       - name: 站点自检
         run: |
           set -e
-          fail=0
-          for f in index.html new.html classic.html worker.js web_run.py upgrade.js \
-                   tools/build_svg_art.py tools/svg2canvas.py \
-                   scripts/css_art/regions.py scripts/css_art/geometry.py \
-                   scripts/css_art/quality.py scripts/css_art/render.py \
-                   scripts/css_art/audit.py scripts/css_art/cli.py \
-                   scripts/css_art/__init__.py favicon.ico apple-touch-icon.png; do
-            if [ -f "_site/$f" ]; then echo "  OK  $f"; else echo "  缺  $f"; fail=1; fi
-          done
-          # 首页必须是两个版本之一，不能是空壳
-          if [ ! -s "_site/index.html" ]; then echo "  首页为空"; fail=1; fi
-          if [ ! -s "_site/new.html" ] || [ ! -s "_site/classic.html" ]; then
-            echo "  两个版本的页面都必须存在"; fail=1
-          fi
+          # 页面三件套非空（文件清单不在这里逐个核对 —— web/ 的完整性由
+          # smoke_test.py 的 [5b] 在本地查，这里只守发布产物的最后一道门）
+          test -s _site/index.html || { echo "  首页为空"; exit 1; }
+          test -s _site/new.html || { echo "  新版页面缺失"; exit 1; }
+          test -s _site/classic.html || { echo "  老版页面缺失"; exit 1; }
           echo "  首页大小 $(wc -c < _site/index.html) 字节 / 新版 $(wc -c < _site/new.html) / 老版 $(wc -c < _site/classic.html)"
           # 核对 worker.js 里列的文件清单与实际发布内容一致
           python3 - <<'PY'
@@ -103,7 +94,6 @@ jobs:
               print('  站点里缺：', missing); sys.exit(1)
           print('  全部存在')
           PY
-          exit $fail
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
