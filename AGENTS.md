@@ -29,9 +29,12 @@
 - 网页版跑的是**同一份 Python 脚本**，没有另写 JS 实现；改了 `tools/` 里任何一个，
   网页版下次部署就跟着变（`web_run.py` 也是直接 import 那两个脚本）
 - `smoke_test.py` 会检查 worker.js 声明的文件清单与实际发布内容是否一致
-- 改过界面后更新 README 那张截图：`python3 tools/shot_web.py`（需要 playwright）。
-  它把界面设成「已选好图、等待生成」的状态再截整页，默认输出覆盖 `examples/screenshot-web-pc.png`。
-  **更新截图时换个文件名**（如 `-pc2`），否则 GitHub 和浏览器会缓存旧图，用户看到的还是老的
+- 改过界面后更新 README 那张截图：`python3 tools/shot_web.py`（需要 playwright，默认
+  1440×1080 整页，输出 `examples/screenshot-web-pc-v2.png`）。它拍的是「第二次打开、刚
+  拖入一张照片」的真实状态：临时起一个 Pages 同构站点（`worker.js` 换成只回报
+  ready + 已缓存的替身，免得真下载 21 MB Pyodide），照片从 `examples/example-photo-vs-svg.jpg`
+  左半裁出、经页面的文件输入框真的「选」进去，历史区塞 3 条示例记录（`--no-history` 可关）。
+  **更新截图时换个文件名**（如 `-v3`），否则 GitHub 和浏览器会缓存旧图，用户看到的还是老的
 - 「生成历史」里早期存的回放页（线稿固定 15% 时间那版）会在**打开/下载时自动升级**：
   `web/index.html` 里内嵌了 `AXIS_OLD` / `AXIS_NEW` 两段代码文本做替换，只改内存副本、
   不动 IndexedDB 里的原件。**改了 `tools/svg2canvas.py` 里的时间轴代码，就要同步改
