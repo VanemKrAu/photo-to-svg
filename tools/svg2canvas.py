@@ -161,7 +161,7 @@ def pack(d):
     return base64.b64encode(blob).decode()
 
 
-def build_lineart(photo, W, H, dark=0.78, seg_pts=16, min_pts=8, approx=1.0):
+def build_lineart(photo, W, H, dark=0.78, seg_pts=16, min_pts=8, approx=1.0, long_keep=24):
     """从原图提真正的线稿：保边平滑 → Canny 得到 1px 边缘 → **追踪成有序折线** →
     按段切开。返回 [(点列, 颜色)]，每段是一「笔」。
 
@@ -214,10 +214,20 @@ def build_lineart(photo, W, H, dark=0.78, seg_pts=16, min_pts=8, approx=1.0):
     # 实测（用户原图）：阈值 110 时链 530→329（保留 62% 结构线），
     # 画在亮区的比例 25%→9%；用「亮点占比」判据则会把亮皮肤上的
     # 轮廓线一起误伤（用户反馈「线稿变淡了」）。
+    #
+    # 2026-09-14 再修：纯亮度判据对亮背景图误杀太重（用户报「线稿在物体边缘
+    # 都没描完就跳去画别的」）。实测走廊人像被删的 638 条链里，223 条是
+    # 「长 ≥30 且边缘强度 ≥120」的真轮廓，最长一条 1022 像素；银发背影
+    # 保 100 条 / 删长链 282 条。补「长链豁免」：连续 ≥24 像素的链一律保留
+    # ——照片纹理不可能有连续 24px 的成形边缘；短链继续按亮度压纹理。
+    # 实测（同尺寸前后对比）：走廊 476→743 条、海边 681→1043 条、
+    # 银发背影 100→382 条；被找回的正是这些图上的物体轮廓。
     luma = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(int)   # int：防 uint8 累加溢出
     def keep(c):
         if len(c) < min_pts:
             return False
+        if len(c) >= long_keep:                       # 长链豁免：必是结构轮廓
+            return True
         return sum(luma[y, x] for (x, y) in c) / len(c) <= 110
 
     chains = []
