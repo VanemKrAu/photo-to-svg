@@ -578,7 +578,7 @@ def main():
     parser.add_argument("--min-area", type=int, default=6)
     # 底板默认纸白：与 make_art / web_run 的底板保持同一套约定（白纸作画）
     parser.add_argument("--background", default="#f0f0f0")
-    parser.add_argument("--dark-cut", type=int, default=14, help="与底色色差≤此值的像素压平为底色")
+    parser.add_argument("--dark-cut", type=int, default=0, help="与底板色差≤此值的像素压平为底板色；0 = 关闭（默认）")
     parser.add_argument("--title", default="纯 SVG 描摹插画")
     parser.add_argument("--base", type=float, default=0.028, help="1× 下每笔间隔（秒）")
     parser.add_argument("--dur", type=float, default=0.5, help="单笔动画时长（秒）")
