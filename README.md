@@ -237,7 +237,7 @@ photo-to-svg/
 │   ├── worker.js           Web Worker：加载 Pyodide、跑流水线
 │   ├── upgrade.js          历史回放页升级库（版本戳 + 迁移链，纯函数、可单测）
 │   └── web_run.py          浏览器端驱动（不走 subprocess，直接调模块）
-├── tests/fixtures/         六个世代的回放页样本（给升级测试用）
+├── tests/fixtures/         七个世代的回放页样本（给升级测试用）
 ├── docs/                   文档
 ├── examples/               示例图
 ├── .github/workflows/      发布网页版到 Pages

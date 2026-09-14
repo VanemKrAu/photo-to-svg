@@ -3,7 +3,7 @@
 """
 test_upgrade.py —— 历史回放页升级测试（Python 入口），跑两段：
 
-  ① 逻辑断言（必须）：node tools/test_upgrade.js —— 对六个黄金样本断言
+  ① 逻辑断言（必须）：node tools/test_upgrade.js —— 对七个黄金样本断言
      版本戳 / 幂等 / 防重复哨兵 / 逐样本特性 / 迁移链机制。
   ② 浏览器验证（可选，需 playwright）：把样本升级后的页面在 Chromium 里逐个打开，
      断言零报错、canvas 真的画出了内容 —— 升级是「文本手术」，最终得在真浏览器里

@@ -3,7 +3,7 @@
  *
  * 为什么需要它：升级层出过两个「静默失败」型事故（docs/踩坑记录.md #18 #19）——
  * 页面看着能用、日志没有错，只是升级没生效 / 重复打了补丁。这类问题只有真跑一遍
- * 「升级后的产物」才抓得到。本测试把六个世代的真实回放页（tests/fixtures/，由
+ * 「升级后的产物」才抓得到。本测试把七个世代的真实回放页（tests/fixtures/，由
  * tools/make_upgrade_fixtures.py 从 git 历史生成）逐个升级，断言：
  *
  *   1. 版本戳：升级后 == GEN_LATEST，且全篇只有一个戳；
@@ -47,19 +47,22 @@ const shouldGone = [
   [/var LW = SKETCH_T>0/g, "旧时间轴代码段被替换"],
 ];
 
-/* 样本清单：文件 → 期望拿到的升级特性（s1 最老，拿不全缩放系统是已知边界，见 README） */
+/* 样本清单：文件 → 期望拿到的升级特性（s1 最老，拿不全缩放系统是已知边界，见 README；
+   s5/s6 有描述框 → 应拿到 v1→v2 的描述框自动变高；s7 是最新模板，直通） */
 const FEATURES = {
   "s1-29770ea.html": ["sqrt", "view", "w800"],
   "s2-f742973.html": ["sqrt", "view", "w800"],
   "s3-0f648ca.html": ["view", "w800"],
   "s4-eaa6ea5.html": ["view", "w800"],
-  "s5-9ab8b88.html": ["view", "w800"],
-  "s6-v1.html": [],
+  "s5-9ab8b88.html": ["view", "w800", "descAuto"],
+  "s6-v1.html": ["descAuto"],
+  "s7-v2.html": [],
 };
 const FEAT_RE = {
   sqrt: [/Math\.sqrt\(AREA\[i\]\)/g, "新时间轴（√面积）"],
   view: [/id="view"/g, "相册式 view 容器"],
   w800: [/innerWidth>=800/g, "并排对照阈值 800"],
+  descAuto: [/function descAutoSize\(\)/, "描述框自动变高（v1→v2 迁移）"],
 };
 
 function testUnits() {
@@ -96,7 +99,7 @@ function testUnits() {
 }
 
 function testSamples() {
-  console.log("\n[3/3] 样本：六个世代逐个升级");
+  console.log("\n[3/3] 样本：七个世代逐个升级");
   const files = Object.keys(FEATURES);
   for (const f of files) {
     const p = path.join(FIX, f);
@@ -127,11 +130,18 @@ function testSamples() {
 
     /* 逐样本特性 */
     if (f === "s6-v1.html") {
-      truthy(r.changed === false && r.text === html, "带戳最新版：零改动直通");
+      truthy(r.changed === true, "v1 产物沿迁移链升到 v2（changed=true）");
+    }
+    if (f === "s7-v2.html") {
+      truthy(r.changed === false && r.text === html, "带戳最新版（v2）：零改动直通");
     }
     for (const key of FEATURES[f]) {
       const [re, label] = FEAT_RE[key];
       truthy(count(r.text, re) >= 1, "拿到升级：" + label);
+    }
+    if (FEATURES[f].indexOf("descAuto") >= 0) {
+      eq(count(r.text, /window\.addEventListener\("resize", function\(\)\{ if\(!descPanel\.hidden\) descAutoSize\(\); \}\);/g),
+         1, "描述框 resize 监听唯一（迁移不重复注入）");
     }
   }
 }

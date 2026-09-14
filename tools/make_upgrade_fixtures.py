@@ -3,17 +3,18 @@
 """
 make_upgrade_fixtures.py —— 重新生成「历史回放页升级」测试的黄金样本。
 
-背景：tests/fixtures/*.html 是六个世代的真实回放页，喂给 tools/test_upgrade.js
+背景：tests/fixtures/*.html 是七个世代的真实回放页，喂给 tools/test_upgrade.js
 做升级回归测试。样本从 git 历史里「复活」：逐个 checkout 当年的 svg2canvas.py，
 用同一张小图 + 小 SVG 跑出当年的产物。这样样本不是手搓的假货，而是真实世代形态。
 
-六个样本（文件 → 来源 commit → 备注）：
+七个样本（文件 → 来源 commit → 备注）：
   s1-29770ea.html   照片转 SVG 流水线初版（金色 UI、老时间轴、无缩放）
   s2-f742973.html   加入缩放与平移（有 zoom 按钮，仍是老时间轴）
   s3-0f648ca.html   相册式缩放（√面积时间轴，缺后续修复）
   s4-eaa6ea5.html   双栏各自独立（接近现状，缺取景器 UI / 描述）
-  s5-9ab8b88.html   图片描述版（现状的前一版，取景器 UI 已就位）
-  s6-v1.html        当前模板（带 <!-- p2sv-gen: v1 --> 版本戳）
+  s5-9ab8b88.html   图片描述版（描述功能首版）
+  s6-v1.html        第一个带版本戳的模板（v1，描述框固定高）—— 489f2a6 生成
+  s7-v2.html        当前模板（v2，描述框自动变高）—— 工作区生成
 
 跑完自己验一遍：python tools/make_upgrade_fixtures.py
 （只重生成缺失的；--force 全部重来。改完 fixtures 记得跑 node tools/test_upgrade.js）
@@ -34,8 +35,9 @@ SAMPLES = [
     ("s2-f742973.html", "f742973", "加缩放与平移"),
     ("s3-0f648ca.html", "0f648ca", "相册式缩放"),
     ("s4-eaa6ea5.html", "eaa6ea5", "双栏各自独立"),
-    ("s5-9ab8b88.html", "9ab8b88", "图片描述版（最新前一版）"),
-    ("s6-v1.html", None, "当前模板（带版本戳 v1）"),
+    ("s5-9ab8b88.html", "9ab8b88", "图片描述版（描述功能首版）"),
+    ("s6-v1.html", "489f2a6", "第一个带戳的模板（v1，描述框固定高）"),
+    ("s7-v2.html", None, "当前模板（v2，描述框自动变高）"),
 ]
 
 
@@ -61,7 +63,7 @@ def main():
         if force or not os.path.exists(p):
             todo.append((name, commit, note))
     if not todo:
-        print("六个样本都在（要重来加 --force）。")
+        print("七个样本都在（要重来加 --force）。")
         return
     os.makedirs(FIX, exist_ok=True)
     print("要生成 %d 个：%s" % (len(todo), "、".join(n for n, _, _ in todo)))
