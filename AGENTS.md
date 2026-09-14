@@ -24,7 +24,8 @@
 仓库同时是一个可直接用的**网页工具**（GitHub Pages 托管）：
 打开 https://vanemkrau.github.io/photo-to-svg/ → 拖图 → 下载 SVG + 回放页。
 
-- `web/index.html` 界面、`web/worker.js`（Pyodide Worker）、`web/web_run.py`（浏览器端驱动）
+- `web/index.html` 界面、`web/worker.js`（Pyodide Worker）、`web/web_run.py`（浏览器端驱动）、
+  `web/upgrade.js`（历史回放页升级库：版本戳 + 迁移链，纯函数、Node 可测）
 - `.github/workflows/pages.yml` 在 push 时把 `web/` + `tools/` + `skill/scripts/` 拼成静态站点发布
 - 网页版跑的是**同一份 Python 脚本**，没有另写 JS 实现；改了 `tools/` 里任何一个，
   网页版下次部署就跟着变（`web_run.py` 也是直接 import 那两个脚本）
@@ -35,14 +36,19 @@
   ready + 已缓存的替身，免得真下载 21 MB Pyodide），照片从 `examples/example-photo-vs-svg.jpg`
   左半裁出、经页面的文件输入框真的「选」进去，历史区塞 3 条示例记录（缩略图 = 各自作品原图缩到 128px、内联在脚本里；`--no-history` 可关）。
   **更新截图时换个文件名**（如 `-v3`），否则 GitHub 和浏览器会缓存旧图，用户看到的还是老的
-- 「生成历史」里早期存的回放页（线稿固定 15% 时间那版）会在**打开/下载时自动升级**：
-  `web/index.html` 里内嵌了 `AXIS_OLD` / `AXIS_NEW` 两段代码文本做替换，只改内存副本、
-  不动 IndexedDB 里的原件。**改了 `tools/svg2canvas.py` 里的时间轴代码，就要同步改
-  `web/index.html` 的 `AXIS_NEW`**，否则历史老记录升级后还是旧行为
+- 「生成历史」里的作品在**打开/下载时自动升级**，逻辑全在 `web/upgrade.js`
+  （index.html 只做 IO + 缓存，不碰升级判断）：无版本戳的老页面跑模糊规则
+  （42 条「冰冻遗产」，不再新增）升完补戳；带 `<!-- p2sv-gen: vN -->` 戳的走精确迁移链。
+  **改了回放页模板（`svg2canvas.py` 的 TEMPLATE）时的固定动作**：
+  ① 模板里的戳版本号 +1；② `web/upgrade.js` 的 `GEN_LATEST` +1、给 `MIGRATIONS` 追加一条
+  `{ from: 旧, to: 新, apply }`；③ 跑 `node tools/test_upgrade.js`（六个黄金样本在
+  `tests/fixtures/`）。机制细节与已知边界见 [`docs/历史升级机制.md`](docs/历史升级机制.md)。
+  **发布时 `upgrade.js` 必须带上**（pages.yml 已复制、`smoke_test.py` 会查）
 - **默认参数在 worker.js 里还有一层兜底**：主线程现在不传 `outline`，
   `worker.js` 的 `m.outline ?? 0` 兜底成 0（曾经写着 `?? 0.15`，导致网页版生成的
   一直走「固定 15%」分支，而 `web_run.py` 的默认值被绕过——查了一圈才发现）。
-  **改这类默认值时，`worker.js`、`web_run.py` 两处一起看**
+  **改这类默认值时，`worker.js`、`web_run.py` 两处一起看**；
+  `smoke_test.py` 的「关键常量一致性」哨兵会帮你盯住这几处，漂了就报错
 
 ---
 
@@ -62,7 +68,10 @@ $PY tools/smoke_test.py --render   # 再真跑一张小图，约 40 秒
 ```
 
 > **改过 `tools/` 里任何脚本后**，务必跑一次 `smoke_test.py`：
-> 它会检查 `tools/` 与 `skill/extras/` 的同名脚本有没有分叉（两边必须一样）。
+> 它会检查 `tools/` 与 `skill/extras/` 的同名脚本有没有分叉（两边必须一样）、
+> 关键常量跨文件是否一致、并跑历史升级的黄金样本测试（node 在时）。
+> 改过回放页模板（`svg2canvas.py` 的 TEMPLATE）或 `web/upgrade.js` 时，
+> 记得按 [`docs/历史升级机制.md`](docs/历史升级机制.md) 的「固定动作」走一遍。
 
 如果这台设备上的 agent 还没装这个 skill，装上：
 
