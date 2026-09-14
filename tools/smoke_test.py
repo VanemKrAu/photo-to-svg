@@ -360,10 +360,11 @@ def check_render():
         if not any("自检通过" in line for line in (r.stdout or "").splitlines()):
             bad("实跑没走到「画布尺寸自检」那一步"); return
         produced = glob.glob(os.path.join(tmp, "smoke", "*"))
-        if len(produced) >= 3:
-            ok("实跑成功，产出 %d 个文件" % len(produced))
+        has_photo = any(os.path.basename(f).startswith("原图") for f in produced)
+        if len(produced) >= 4 and has_photo:
+            ok("实跑成功，产出 %d 个文件（含原图副本）" % len(produced))
         else:
-            bad("实跑产物不全（只有 %d 个）" % len(produced))
+            bad("实跑产物不全（%d 个，含原图=%s）" % (len(produced), has_photo))
             return
         check_base_color(os.path.join(tmp, "smoke"))
 

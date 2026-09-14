@@ -9,6 +9,7 @@ make_art.py —— 一条命令跑完「照片 → 描摹 SVG → Canvas 逐笔�
   2. 去掉纯 SVG 版的「白点」：给所有 <path> 补同色 stroke + stroke-width 0.6
   3. 生成 Canvas 回放页：真线稿层（Canny 轮廓）+ 大色块扫描线切分 + 按视觉重量分配时间
   4. 写一份.json 参数报告
+  5. 把原图复制进输出目录（原图.<ext>）—— 每个作品文件夹都带一份原图，方便重出 / 对照
 
 用法：
   python3 tools/make_art.py <原图> <作品名> [标题] [秒数] [线稿时间占比] [epsilon] [线宽]
@@ -37,6 +38,7 @@ import os
 import re
 import sys
 import json
+import shutil
 import subprocess
 import numpy as np
 from PIL import Image
@@ -163,6 +165,7 @@ def main():
         print(__doc__)
         return
     photo = os.path.abspath(argv[0])
+    src_photo = photo        # 用户给的原图（预处理前的）—— 生成完会随产物一起放进输出目录
     name = argv[1]
     title = argv[2] if len(argv) > 2 else (name + " · 逐笔绘制回放")
     dur = argv[3] if len(argv) > 3 else "90"
@@ -243,9 +246,21 @@ def main():
     json.dump(report, open(os.path.join(outdir, name + ".json"), "w", encoding="utf-8"),
               ensure_ascii=False, indent=2)
 
+    # 产物目录里留一份原图（每个作品文件夹都带原图，方便以后重出 / 对照）。
+    # 存的是「用户给的原图」，不是预处理产物。
+    ext = os.path.splitext(src_photo)[1].lower() or ".png"
+    photo_copy = os.path.join(outdir, "原图" + ext)
+    if os.path.abspath(src_photo) != os.path.abspath(photo_copy):
+        shutil.copyfile(src_photo, photo_copy)
+    # 预处理中间产物（_prep.png）不算产物，清掉
+    prep = os.path.join(outdir, "_prep.png")
+    if os.path.exists(prep):
+        os.remove(prep)
+
     print("\n完成 → %s" % outdir)
     print("  %s.svg   %.1f MB  （矢量原图，电脑上看）" % (name, report["svg"]["bytes_mb"]))
     print("  %s.html  %.1f MB  （Canvas 回放，手机/电脑都能开）" % (name, report["html"]["bytes_mb"]))
+    print("  原图%s     （原图副本，随产物一起留档）" % ext)
 
 
 if __name__ == "__main__":
