@@ -273,7 +273,7 @@ TEMPLATE = r'''<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- p2sv-gen: v1 -->
+<!-- p2sv-gen: v2 -->
 <title>__TITLE__</title>
 <!-- 图标内联成 data URI（64×64 PNG）：回放页是独立文件，下载到哪儿、发给谁，
      都得自带图标 —— 不要换成外部文件引用，那样一挪位置就没了。 -->
@@ -322,7 +322,7 @@ TEMPLATE = r'''<!DOCTYPE html>
   .desc-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
   .desc-head button{background:transparent;border:0;color:var(--dim);font-size:12px;
     line-height:1;padding:2px 4px;cursor:pointer}
-  .desc-panel textarea{width:100%;resize:vertical;min-height:76px;max-height:42vh;
+  .desc-panel textarea{width:100%;resize:none;min-height:76px;max-height:42vh;
     background:var(--graphite);border:1px solid var(--line);border-radius:3px;
     color:var(--text);font:inherit;font-size:12.5px;line-height:1.7;padding:8px 10px;outline:none}
   .desc-panel textarea:focus{border-color:#3A3A42}
@@ -829,19 +829,40 @@ function descApply(t){
   descBox.classList.toggle("empty", !t);
   descRevert.hidden=!(DESC_ORIG && t!==DESC_ORIG);
 }
+/* 自动变高：描述写多少，框就长多高；上限**现算** —— 底边最多贴到控制栏上方
+   10px（不与底部工具栏干涉），再长就框内滚动。展开 / 输入 / 窗口变化时都重算。
+   测量要先压到 1px 再读 scrollHeight：textarea 内容不满时 scrollHeight 会被
+   显示高度撑底，不先压扁就读不到真实内容高度。 */
+function descAutoSize(){
+  if(descPanel.hidden) return;
+  descInput.style.maxHeight="none";
+  descInput.style.height="1px";
+  var need=descInput.scrollHeight+2;             /* +2 = 上下边框（border-box） */
+  var footerEl=document.querySelector("footer");
+  var fr=footerEl&&footerEl.getBoundingClientRect();
+  var footTop=(fr&&fr.height>0)?fr.top:window.innerHeight;
+  var other=descPanel.offsetHeight-descInput.offsetHeight;   /* 面板里 textarea 以外的部分 */
+  var max=Math.max(76, footTop-10-descPanel.getBoundingClientRect().top-other);
+  descInput.style.maxHeight=max+"px";
+  descInput.style.height=Math.max(76, Math.min(need, max))+"px";
+  descInput.style.overflowY=(need>max)?"auto":"hidden";
+}
 function descOpen(on){
   descPanel.hidden=!on;
   descSum.setAttribute("aria-expanded", on?"true":"false");
+  if(on) descAutoSize();                         /* 展开时按内容算一次高度 */
 }
 descSum.addEventListener("click", function(){ descOpen(descPanel.hidden); });
 document.getElementById("descClose").addEventListener("click", function(){ descOpen(false); });
 descInput.addEventListener("input", function(){
   try{ localStorage.setItem(DESC_KEY, descInput.value); }catch(_){}
   descApply(descInput.value);
+  descAutoSize();
 });
 descRevert.addEventListener("click", function(){
   try{ localStorage.removeItem(DESC_KEY); }catch(_){}
   descApply(DESC_ORIG);
+  descAutoSize();
 });
 /* 面板内的按键不冒泡到全局快捷键（否则空格 / 方向键会被播放器抢走）；
    Esc 除外 —— 留给「点面板外 / 按 Esc 收起」那两条。 */
@@ -852,6 +873,8 @@ document.addEventListener("click", function(e){
 document.addEventListener("keydown", function(e){
   if(e.key==="Escape" && !descPanel.hidden) descOpen(false);
 });
+/* 窗口尺寸一变，描述框的可用上限也跟着变：展开状态下重算一次 */
+window.addEventListener("resize", function(){ if(!descPanel.hidden) descAutoSize(); });
 descApply((function(){ try{ var v=localStorage.getItem(DESC_KEY); return v===null?DESC_ORIG:v; }catch(_){ return DESC_ORIG; } })());
 
 /* ---- 精确布局：按可用空间等比缩放画框（不依赖 aspect-ratio 的浏览器实现） ---- */

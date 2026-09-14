@@ -31,9 +31,62 @@
 })(typeof self !== 'undefined' ? self : this, function () {
 "use strict";
 
-var GEN_LATEST = 1;      /* 当前回放页模板版本：v1 = 第一个带版本戳的模板（2026-09-14） */
+var GEN_LATEST = 2;      /* 当前回放页模板版本。v1 = 第一个带版本戳的模板（2026-09-14）；
+                            v2 = 描述框自动变高（同日）；改模板行为时 +1 并追加迁移 */
 var LEGACY_TARGET = 1;   /* 模糊规则升完的等价版本。恒为 1，不随 GEN_LATEST 变 */
-var MIGRATIONS = [       /* 未来：{ from: N, to: N+1, apply(text){ return text | null; } } */
+
+/* v1 → v2 迁移要注入的 descAutoSize 及其注释（与写入迁移那一刻的模板逐字一致；
+   本段从写完起即冻结 —— 将来再改这个函数，走新的 v2→v3 迁移，不再动这里）。 */
+var DESC_AUTOSIZE_DEF = [
+  '/* 自动变高：描述写多少，框就长多高；上限**现算** —— 底边最多贴到控制栏上方',
+  '   10px（不与底部工具栏干涉），再长就框内滚动。展开 / 输入 / 窗口变化时都重算。',
+  '   测量要先压到 1px 再读 scrollHeight：textarea 内容不满时 scrollHeight 会被',
+  '   显示高度撑底，不先压扁就读不到真实内容高度。 */',
+  'function descAutoSize(){',
+  '  if(descPanel.hidden) return;',
+  '  descInput.style.maxHeight="none";',
+  '  descInput.style.height="1px";',
+  '  var need=descInput.scrollHeight+2;             /* +2 = 上下边框（border-box） */',
+  '  var footerEl=document.querySelector("footer");',
+  '  var fr=footerEl&&footerEl.getBoundingClientRect();',
+  '  var footTop=(fr&&fr.height>0)?fr.top:window.innerHeight;',
+  '  var other=descPanel.offsetHeight-descInput.offsetHeight;   /* 面板里 textarea 以外的部分 */',
+  '  var max=Math.max(76, footTop-10-descPanel.getBoundingClientRect().top-other);',
+  '  descInput.style.maxHeight=max+"px";',
+  '  descInput.style.height=Math.max(76, Math.min(need, max))+"px";',
+  '  descInput.style.overflowY=(need>max)?"auto":"hidden";',
+  '}',
+].join('\n');
+
+var MIGRATIONS = [
+  { from: 1, to: 2,
+    /* v2：描述框自动变高（v1 的框是固定高度、超长只能在框内滚）。
+       5 步注入：① CSS 关掉手动 resize；② 注入 descAutoSize 并让展开时调用；
+       ③ input 后重算；④ 「恢复原始描述」后重算；⑤ 窗口 resize 重算。
+       没有描述框的老世代（9ab8b88 之前）五步全不命中 —— 返回 null，
+       版本照常推进（applyMigrations 的约定）。 */
+    apply: function(t){
+      var n = 0;
+      function put(from, to){
+        if (t.indexOf(to) >= 0) return;                              /* 效果已在：跳过（幂等） */
+        var i = t.indexOf(from);
+        if (i < 0 || t.indexOf(from, i + from.length) >= 0) return;  /* 找不到 / 不唯一：跳过 */
+        t = t.replace(from, to);
+        n++;
+      }
+      put('textarea{width:100%;resize:vertical;min-height:76px;max-height:42vh;',
+          'textarea{width:100%;resize:none;min-height:76px;max-height:42vh;');
+      put('function descOpen(on){\n  descPanel.hidden=!on;\n  descSum.setAttribute("aria-expanded", on?"true":"false");\n}',
+          DESC_AUTOSIZE_DEF + '\nfunction descOpen(on){\n  descPanel.hidden=!on;\n  descSum.setAttribute("aria-expanded", on?"true":"false");\n  if(on) descAutoSize();\n}');
+      put('descInput.addEventListener("input", function(){\n  try{ localStorage.setItem(DESC_KEY, descInput.value); }catch(_){}\n  descApply(descInput.value);\n});',
+          'descInput.addEventListener("input", function(){\n  try{ localStorage.setItem(DESC_KEY, descInput.value); }catch(_){}\n  descApply(descInput.value);\n  descAutoSize();\n});');
+      put('descRevert.addEventListener("click", function(){\n  try{ localStorage.removeItem(DESC_KEY); }catch(_){}\n  descApply(DESC_ORIG);\n});',
+          'descRevert.addEventListener("click", function(){\n  try{ localStorage.removeItem(DESC_KEY); }catch(_){}\n  descApply(DESC_ORIG);\n  descAutoSize();\n});');
+      put('document.addEventListener("keydown", function(e){\n  if(e.key==="Escape" && !descPanel.hidden) descOpen(false);\n});',
+          'document.addEventListener("keydown", function(e){\n  if(e.key==="Escape" && !descPanel.hidden) descOpen(false);\n});\n/* 窗口尺寸一变，描述框的可用上限也跟着变：展开状态下重算一次 */\nwindow.addEventListener("resize", function(){ if(!descPanel.hidden) descAutoSize(); });');
+      return n ? t : null;
+    }
+  },
 ];
 
 function readVersion(text){
