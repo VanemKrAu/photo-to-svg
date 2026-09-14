@@ -493,7 +493,7 @@ function toggleFull(){
 }
 document.getElementById("full").addEventListener("click",toggleFull);
 document.getElementById("fsExit").addEventListener("click",toggleFull);` },
-    /* ---------- 2026-09-15：右栏改成「自己一套缩放 / 平移」 ----------
+    /* ---------- 2026-09-13：右栏改成「自己一套缩放 / 平移」 ----------
        原先进双栏后两栏**共享同一个 zoom**：滚轮在哪边滚都是两张一起放大，
        右栏还压根没绑拖动 —— 就是「拖原图拖不动、拖左栏时原图却跟着跑」。
        这批规则把它拆成两套独立状态（鼠标落在哪一栏就只动哪一栏）。
