@@ -304,8 +304,8 @@ TEMPLATE = r'''<!DOCTYPE html>
   .frame{position:relative;flex:1 1 auto;min-width:0;align-self:stretch;overflow:hidden;touch-action:none}
   /* 跟随缩放/平移的「画面」容器：canvas 和对照层都放里面，一次 transform 全部同步 */
   .view{position:absolute;left:0;top:0;will-change:transform}
-  /* 底板色 = 生成时的底色（__BG__）。绝不能写死浅色 —— 深色图里「与底色
-     相近、被整簇跳过的深色块」会露出这层底板，浅色底板会让它满屏白斑 */
+  /* 底板色 = 生成时的底色（__BG__，取自 SVG）。绝不能写死 —— 底板 rect 与
+     回放页背景必须同源；两边不一致时（如写死浅色）深色图会满屏白斑（2026-09-14 用户报） */
   canvas{display:block;width:100%;height:100%;background:__BG__}
   #ghost{position:absolute;inset:0;background-image:var(--ghostimg);background-size:100% 100%;
     background-repeat:no-repeat;clip-path:inset(0 0 0 50%);pointer-events:none}
@@ -1083,9 +1083,9 @@ def main():
     st = float(sys.argv[7]) if len(sys.argv) > 7 else 0.0    # 线稿阶段时间占比；0 = 不单独控制（跟色块一起按视觉重量）
     print("解析 SVG…")
     d = parse_svg(src)
-    # 回放页的底板色必须和 SVG 里的底板一致：深色图里「与底色相近、被整簇
-    # 跳过的块」根本不画，露出来的就是这层底板 —— 两边不一致时（比如底板
-    # 写死浅色）深色图会满屏白斑（2026-09-14 用户报）。
+    # 回放页的底板色必须和 SVG 里的底板一致（同源）：两边不一致时（比如底板
+    # 写死浅色）深色图会满屏白斑（2026-09-14 用户报）。旧作品的 SVG 里是旧
+    # 底板色，也照读 —— 这就是「从 SVG 读」而非写死的意义。
     with open(src, encoding="utf-8") as fh:
         m_bg = re.search(r'<rect width="[\d.]+" height="[\d.]+" fill="(#[0-9a-fA-F]{6})"', fh.read())
     bgcolor = m_bg.group(1) if m_bg else "#f0f0f0"
